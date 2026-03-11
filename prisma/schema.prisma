@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Taxista {
+  id                 String               @id @default(uuid())
+  nombreCompleto     String
+  telefono           String               @unique
+  passwordHash       String
+  estado             EstadoTaxista        @default(desc)
+  creadoEn           DateTime             @default(now())
+
+  vehiculo           Vehiculo?
+  ofertas            OfertaSolicitud[]
+  asignaciones       AsignacionSolicitud[]
+}
+
+model Vehiculo {
+  id                 String               @id @default(uuid())
+  taxistaId          String               @unique
+  numeroTaxi         String               @unique
+  matricula          String?
+  modelo             String?
+  color              String?
+  creadoEn           DateTime             @default(now())
+
+  taxista            Taxista              @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  asignaciones       AsignacionSolicitud[]
+}
+
+model SolicitudViaje {
+  id                 String               @id @default(uuid())
+  nombreCliente      String
+  telefonoCliente    String
+  direccionRecogida  String
+  latitudRecogida    Float?
+  longitudRecogida   Float?
+  estado             EstadoSolicitud      @default(pendiente)
+  origen             OrigenSolicitud      @default(llamada_ia)
+  confirmadaEn       DateTime?
+  creadaEn           DateTime             @default(now())
+
+  ofertas            OfertaSolicitud[]
+  asignacion         AsignacionSolicitud?
+}
+
+model OfertaSolicitud {
+  id                 String               @id @default(uuid())
+  solicitudViajeId   String
+  taxistaId          String
+  estado             EstadoOferta         @default(pendiente)
+  ofrecidaEn         DateTime             @default(now())
+  respondidaEn       DateTime?
+
+  solicitudViaje     SolicitudViaje       @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  taxista            Taxista              @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+}
+
+model AsignacionSolicitud {
+  id                 String               @id @default(uuid())
+  solicitudViajeId   String               @unique
+  taxistaId          String
+  vehiculoId         String
+  asignadaEn         DateTime             @default(now())
+
+  solicitudViaje     SolicitudViaje       @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  taxista            Taxista              @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  vehiculo           Vehiculo             @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+}
+
+enum EstadoTaxista {
+  desc
+  disponible
+  ocupado
+}
+
+enum EstadoSolicitud {
+  pendiente
+  ofertada
+  asignada
+  sin_taxista
+  cancelada
+  completada
+}
+
+enum EstadoOferta {
+  pendiente
+  aceptada
+  rechazada
+  expirada
+}
+
+enum OrigenSolicitud {
+  llamada_ia
+  operador
+  web
+}

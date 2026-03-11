@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+dist
+coverage
+.prisma
+apps/app-taxista/node_modules
+apps/app-taxista/dist
