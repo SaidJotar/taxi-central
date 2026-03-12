@@ -21,50 +21,48 @@ function registerMediaStream(server, llamadas) {
     const wss = new WebSocket.Server({ noServer: true });
 
     server.on("upgrade", (req, socket, head) => {
-        if (req.url === "/media-stream") {
+        if (req.url && req.url.startsWith("/media-stream")) {
             wss.handleUpgrade(req, socket, head, (ws) => {
                 wss.emit("connection", ws, req);
             });
-        } else {
-            socket.destroy();
         }
     });
 
     function textoPareceNombre(texto) {
-    if (!texto || typeof texto !== "string") return false;
+        if (!texto || typeof texto !== "string") return false;
 
-    const limpio = texto.trim();
+        const limpio = texto.trim();
 
-    if (limpio.length < 2 || limpio.length > 40) return false;
-    if (/\d/.test(limpio)) return false;
+        if (limpio.length < 2 || limpio.length > 40) return false;
+        if (/\d/.test(limpio)) return false;
 
-    const palabras = limpio.split(/\s+/);
-    if (palabras.length > 4) return false;
+        const palabras = limpio.split(/\s+/);
+        if (palabras.length > 4) return false;
 
-    return true;
-}
+        return true;
+    }
 
-function textoPareceDireccion(texto) {
-    if (!texto || typeof texto !== "string") return false;
+    function textoPareceDireccion(texto) {
+        if (!texto || typeof texto !== "string") return false;
 
-    const limpio = texto.trim().toLowerCase();
+        const limpio = texto.trim().toLowerCase();
 
-    if (limpio.length < 5 || limpio.length > 120) return false;
+        if (limpio.length < 5 || limpio.length > 120) return false;
 
-    const tieneTipoVia =
-        limpio.includes("calle") ||
-        limpio.includes("avenida") ||
-        limpio.includes("avda") ||
-        limpio.includes("plaza") ||
-        limpio.includes("paseo") ||
-        limpio.includes("camino") ||
-        limpio.includes("ronda") ||
-        limpio.includes("carretera");
+        const tieneTipoVia =
+            limpio.includes("calle") ||
+            limpio.includes("avenida") ||
+            limpio.includes("avda") ||
+            limpio.includes("plaza") ||
+            limpio.includes("paseo") ||
+            limpio.includes("camino") ||
+            limpio.includes("ronda") ||
+            limpio.includes("carretera");
 
-    const tieneNumero = /\d+/.test(limpio);
+        const tieneNumero = /\d+/.test(limpio);
 
-    return tieneTipoVia || tieneNumero;
-}
+        return tieneTipoVia || tieneNumero;
+    }
 
     wss.on("connection", (twilioWs, req) => {
         console.log("✅ Twilio WS conectado en", req.url);
@@ -158,7 +156,7 @@ function textoPareceDireccion(texto) {
                         speechStartedAt = Date.now();
                         cancelarCommitPendiente();
                         break;
-                  
+
                     case "input_audio_buffer.speech_stopped":
                         console.log("🟢 speech_stopped");
 
