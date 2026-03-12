@@ -6,12 +6,14 @@ function registerIncomingCallRoute(app, llamadas) {
     console.log(">>> POST /incoming-call RECIBIDO");
     console.log("Body:", req.body);
 
-    const telefonoCliente =
-      req.body.Direction === "outbound-api"
-        ? (req.body.To || null)
-        : (req.body.From || null);
+    const body = req.body || {};
 
-    const callSid = req.body.CallSid || null;
+    const telefonoCliente =
+      body.Direction === "outbound-api"
+        ? (body.To || null)
+        : (body.From || null);
+
+    const callSid = body.CallSid || null;
 
     if (callSid) {
       llamadas.set(callSid, {
