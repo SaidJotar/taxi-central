@@ -11,7 +11,14 @@ let io = null;
 function iniciarSocket(server) {
   io = new Server(server, {
     cors: {
-      origin: "*",
+      origin: [
+        "https://taxista.sjaceuta.es",
+        "https://sjaceuta.es",
+        "https://www.sjaceuta.es",
+        "https://api.sjaceuta.es",
+      ],
+      methods: ["GET", "POST"],
+      credentials: true,
     },
   });
 
