@@ -8,11 +8,13 @@ const { leerJsonArray } = require("./services/storageService");
 const prisma = require("./services/bd");
 const { iniciarSocket } = require("./socket");
 const { obtenerIo } = require("./socket");
+const authRoutes = require("./routes/auth");
 
 const app = express();
 
 app.use(cors({
   origin: [
+    "http://localhost:5173",
     "https://sjaceuta.es",
     "https://www.sjaceuta.es",
     "https://api.sjaceuta.es",
@@ -23,6 +25,8 @@ app.use(cors({
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+app.use("/auth", authRoutes);
 
 const server = http.createServer(app);
 const llamadas = new Map();
@@ -35,7 +39,7 @@ app.get("/solicitudes", async (req, res) => {
   try {
     const solicitudes = await prisma.solicitudViaje.findMany({
       orderBy: {
-        creadaEn: "desc",
+        creadaEn: "desconectado",
       },
     });
 
@@ -91,7 +95,7 @@ app.get("/ofertas", async (req, res) => {
         },
       },
       orderBy: {
-        ofrecidaEn: "desc",
+        ofrecidaEn: "desconectado",
       },
     });
 

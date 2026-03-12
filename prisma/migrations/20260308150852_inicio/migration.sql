@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "EstadoTaxista" AS ENUM ('desc', 'disponible', 'ocupado');
+CREATE TYPE "EstadoTaxista" AS ENUM ('desconectado', 'disponible', 'ocupado');
 
 -- CreateEnum
 CREATE TYPE "EstadoSolicitud" AS ENUM ('pendiente', 'ofertada', 'asignada', 'sin_taxista', 'cancelada', 'completada');
@@ -16,7 +16,7 @@ CREATE TABLE "Taxista" (
     "nombreCompleto" TEXT NOT NULL,
     "telefono" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
-    "estado" "EstadoTaxista" NOT NULL DEFAULT 'desc',
+    "estado" "EstadoTaxista" NOT NULL DEFAULT 'desconectado',
     "creadoEn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Taxista_pkey" PRIMARY KEY ("id")

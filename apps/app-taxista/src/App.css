@@ -173,3 +173,47 @@
     width: 100%;
   }
 }
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #dbe1ea;
+  font-size: 1rem;
+  outline: none;
+}
+
+.login-form input:focus {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.15);
+}
+
+.form-error {
+  margin: 0;
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.modo-switch {
+  margin-top: 14px;
+  width: 100%;
+}
+
+.logout-btn {
+  margin-top: 10px;
+  background: #ef4444;
+  color: white;
+  border: none;
+}
+
+.logout-btn:hover {
+  background: #dc2626;
+}

@@ -7,73 +7,68 @@ datasource db {
 }
 
 model Taxista {
-  id                 String               @id @default(uuid())
-  nombreCompleto     String
-  telefono           String               @unique
-  passwordHash       String
-  estado             EstadoTaxista        @default(desc)
-  creadoEn           DateTime             @default(now())
-
-  vehiculo           Vehiculo?
-  ofertas            OfertaSolicitud[]
-  asignaciones       AsignacionSolicitud[]
+  id             String                @id @default(uuid())
+  nombreCompleto String
+  telefono       String                @unique
+  passwordHash   String
+  estado         EstadoTaxista         @default(desconectado)
+  creadoEn       DateTime              @default(now())
+  asignaciones   AsignacionSolicitud[]
+  ofertas        OfertaSolicitud[]
+  vehiculo       Vehiculo?
 }
 
 model Vehiculo {
-  id                 String               @id @default(uuid())
-  taxistaId          String               @unique
-  numeroTaxi         String               @unique
-  matricula          String?
-  modelo             String?
-  color              String?
-  creadoEn           DateTime             @default(now())
-
-  taxista            Taxista              @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
-  asignaciones       AsignacionSolicitud[]
+  id           String                @id @default(uuid())
+  taxistaId    String                @unique
+  numeroTaxi   String                @unique
+  matricula    String?
+  modelo       String?
+  color        String?
+  creadoEn     DateTime              @default(now())
+  asignaciones AsignacionSolicitud[]
+  taxista      Taxista               @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
 }
 
 model SolicitudViaje {
-  id                 String               @id @default(uuid())
-  nombreCliente      String
-  telefonoCliente    String
-  direccionRecogida  String
-  latitudRecogida    Float?
-  longitudRecogida   Float?
-  estado             EstadoSolicitud      @default(pendiente)
-  origen             OrigenSolicitud      @default(llamada_ia)
-  confirmadaEn       DateTime?
-  creadaEn           DateTime             @default(now())
-
-  ofertas            OfertaSolicitud[]
-  asignacion         AsignacionSolicitud?
+  id                String               @id @default(uuid())
+  nombreCliente     String
+  telefonoCliente   String
+  direccionRecogida String
+  latitudRecogida   Float?
+  longitudRecogida  Float?
+  estado            EstadoSolicitud      @default(pendiente)
+  origen            OrigenSolicitud      @default(llamada_ia)
+  confirmadaEn      DateTime?
+  creadaEn          DateTime             @default(now())
+  asignacion        AsignacionSolicitud?
+  ofertas           OfertaSolicitud[]
 }
 
 model OfertaSolicitud {
-  id                 String               @id @default(uuid())
-  solicitudViajeId   String
-  taxistaId          String
-  estado             EstadoOferta         @default(pendiente)
-  ofrecidaEn         DateTime             @default(now())
-  respondidaEn       DateTime?
-
-  solicitudViaje     SolicitudViaje       @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
-  taxista            Taxista              @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  id               String         @id @default(uuid())
+  solicitudViajeId String
+  taxistaId        String
+  estado           EstadoOferta   @default(pendiente)
+  ofrecidaEn       DateTime       @default(now())
+  respondidaEn     DateTime?
+  solicitudViaje   SolicitudViaje @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  taxista          Taxista        @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
 }
 
 model AsignacionSolicitud {
-  id                 String               @id @default(uuid())
-  solicitudViajeId   String               @unique
-  taxistaId          String
-  vehiculoId         String
-  asignadaEn         DateTime             @default(now())
-
-  solicitudViaje     SolicitudViaje       @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
-  taxista            Taxista              @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
-  vehiculo           Vehiculo             @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  id               String         @id @default(uuid())
+  solicitudViajeId String         @unique
+  taxistaId        String
+  vehiculoId       String
+  asignadaEn       DateTime       @default(now())
+  solicitudViaje   SolicitudViaje @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  taxista          Taxista        @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  vehiculo         Vehiculo       @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
 }
 
 enum EstadoTaxista {
-  desc
+  desconectado
   disponible
   ocupado
 }
