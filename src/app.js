@@ -35,20 +35,6 @@ app.get("/", (req, res) => {
   res.send("Servidor taxi-ai funcionando");
 });
 
-app.get("/solicitudes", async (req, res) => {
-  try {
-    const solicitudes = await prisma.solicitudViaje.findMany({
-      orderBy: {
-        creadaEn: "desconectado",
-      },
-    });
-
-    res.json(solicitudes);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 app.get("/taxistas", async (req, res) => {
   try {
     const taxistas = await prisma.taxista.findMany({
@@ -78,98 +64,6 @@ app.get("/vehiculos", async (req, res) => {
     });
 
     res.json(vehiculos);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get("/ofertas", async (req, res) => {
-  try {
-    const ofertas = await prisma.ofertaSolicitud.findMany({
-      include: {
-        solicitudViaje: true,
-        taxista: {
-          include: {
-            vehiculo: true,
-          },
-        },
-      },
-      orderBy: {
-        ofrecidaEn: "desc",
-      },
-    });
-
-    res.json(ofertas);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get("/solicitudes/:id", async (req, res) => {
-  try {
-    const solicitud = await prisma.solicitudViaje.findUnique({
-      where: { id: req.params.id },
-      include: {
-        asignacion: {
-          include: {
-            taxista: true,
-            vehiculo: true,
-          },
-        },
-        ofertas: true,
-      },
-    });
-
-    if (!solicitud) {
-      return res.status(404).json({ error: "Solicitud no encontrada" });
-    }
-
-    res.json(solicitud);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post("/prueba/oferta/:taxistaId", async (req, res) => {
-  try {
-    const { taxistaId } = req.params;
-
-    const solicitud = await prisma.solicitudViaje.create({
-      data: {
-        nombreCliente: "Cliente Demo",
-        telefonoCliente: "600000999",
-        direccionRecogida: "Calle Mayor 10",
-        estado: "ofertada",
-        origen: "operador",
-        confirmadaEn: new Date(),
-      },
-    });
-
-    const oferta = await prisma.ofertaSolicitud.create({
-      data: {
-        solicitudViajeId: solicitud.id,
-        taxistaId,
-        estado: "pendiente",
-      },
-    });
-
-    const io = obtenerIo();
-
-    io.to(`taxista:${taxistaId}`).emit("oferta:recibida", {
-      ofertaId: oferta.id,
-      solicitud: {
-        id: solicitud.id,
-        nombreCliente: solicitud.nombreCliente,
-        telefonoCliente: solicitud.telefonoCliente,
-        direccionRecogida: solicitud.direccionRecogida,
-      },
-    });
-
-    res.json({
-      ok: true,
-      ofertaId: oferta.id,
-      solicitudId: solicitud.id,
-    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
