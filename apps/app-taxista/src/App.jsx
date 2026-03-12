@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { socket } from "./api/socket";
 import TarjetaOferta from "./components/TarjetaOferta";
+import "./App.css";
 
 const TAXISTA_ID_DEMO =
-  new URLSearchParams(window.location.search).get("taxista") ||
-  "fc23b8df-4e51-4086-b075-729247dad71b";
-
+  new URLSearchParams(window.location.search).get("taxista");
 
 export default function App() {
   const [conectado, setConectado] = useState(false);
@@ -54,17 +53,11 @@ export default function App() {
     socket.on("oferta:recibida", (data) => {
       console.log("📨 oferta:recibida", data);
       setOferta(data);
-      setMensajes((prev) => [
-        `Oferta recibida: ${data.ofertaId}`,
-        ...prev,
-      ]);
+      setMensajes((prev) => [`Oferta recibida: ${data.ofertaId}`, ...prev]);
     });
 
     socket.on("oferta:aceptada_ok", (data) => {
-      setMensajes((prev) => [
-        `Oferta aceptada: ${data.ofertaId}`,
-        ...prev,
-      ]);
+      setMensajes((prev) => [`Oferta aceptada: ${data.ofertaId}`, ...prev]);
 
       if (data.solicitud?.asignacion?.vehiculo?.numeroTaxi) {
         setMensajes((prev) => [
@@ -78,35 +71,24 @@ export default function App() {
     });
 
     socket.on("oferta:rechazada_ok", (data) => {
-      setMensajes((prev) => [
-        `Oferta rechazada: ${data.ofertaId}`,
-        ...prev,
-      ]);
+      setMensajes((prev) => [`Oferta rechazada: ${data.ofertaId}`, ...prev]);
       setOferta(null);
     });
 
     socket.on("oferta:expirada", (data) => {
       console.log("⏰ oferta:expirada", data);
 
-      setMensajes((prev) => [
-        `Oferta expirada: ${data.ofertaId}`,
-        ...prev,
-      ]);
+      setMensajes((prev) => [`Oferta expirada: ${data.ofertaId}`, ...prev]);
 
       setOferta((actual) => {
-        if (actual?.ofertaId === data.ofertaId) {
-          return null;
-        }
+        if (actual?.ofertaId === data.ofertaId) return null;
         return actual;
       });
     });
 
     socket.on("error:general", (data) => {
       console.log("❌ error:general", data);
-      setMensajes((prev) => [
-        `Error: ${data.message}`,
-        ...prev,
-      ]);
+      setMensajes((prev) => [`Error: ${data.message}`, ...prev]);
     });
 
     return () => {
@@ -124,8 +106,6 @@ export default function App() {
   }, []);
 
   const cambiarEstado = (nuevoEstado) => {
-    console.log("🔄 Enviando cambio de estado:", TAXISTA_ID_DEMO, nuevoEstado);
-
     socket.emit("taxista:cambiar_estado", {
       taxistaId: TAXISTA_ID_DEMO,
       estado: nuevoEstado,
@@ -146,56 +126,51 @@ export default function App() {
   };
 
   return (
-    <div style={styles.container}>
-      <h1>
-        {numeroTaxi ? `App ${numeroTaxi}` : "App Taxista"}
-      </h1>
-      <p>
-        <strong>Socket:</strong> {conectado ? "Conectado" : "Desconectado"}
-      </p>
+    <main className="app-shell">
+      <section className="app-card">
+        <div className="app-header">
+          <p className={`estado-socket ${conectado ? "ok" : "off"}`}>
+            {conectado ? "Conectado" : "Desconectado"}
+          </p>
 
-      <p>
-        <strong>Estado:</strong> {estado}
-      </p>
+          <h1 className="app-title">
+            {numeroTaxi ? `Taxi ${numeroTaxi}` : "App Taxista"}
+          </h1>
 
-      <div style={styles.actions}>
-        <button onClick={() => cambiarEstado("disponible")}>Disponible</button>
-        <button onClick={() => cambiarEstado("ocupado")}>Ocupado</button>
-        <button onClick={() => cambiarEstado("desc")}>Desconectado</button>
-      </div>
+          <p className="app-subtitle">
+            Estado actual: <strong>{estado}</strong>
+          </p>
+        </div>
 
-      <TarjetaOferta
-        oferta={oferta}
-        onAceptar={aceptarOferta}
-        onRechazar={rechazarOferta}
-      />
+        <div className="actions">
+          <button
+            className={estado === "disponible" ? "activo" : ""}
+            onClick={() => cambiarEstado("disponible")}
+          >
+            Disponible
+          </button>
 
-      <div style={styles.log}>
-        <h3>Eventos</h3>
-        {mensajes.map((m, i) => (
-          <div key={i}>{m}</div>
-        ))}
-      </div>
-    </div>
+          <button
+            className={estado === "ocupado" ? "activo" : ""}
+            onClick={() => cambiarEstado("ocupado")}
+          >
+            Ocupado
+          </button>
+
+          <button
+            className={estado === "desc" ? "activo" : ""}
+            onClick={() => cambiarEstado("desc")}
+          >
+            Desconectado
+          </button>
+        </div>
+
+        <TarjetaOferta
+          oferta={oferta}
+          onAceptar={aceptarOferta}
+          onRechazar={rechazarOferta}
+        />
+      </section>
+    </main>
   );
 }
-
-const styles = {
-  container: {
-    maxWidth: "480px",
-    margin: "0 auto",
-    padding: "24px",
-    fontFamily: "sans-serif",
-  },
-  actions: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "16px",
-  },
-  log: {
-    marginTop: "24px",
-    padding: "12px",
-    border: "1px solid #ddd",
-    borderRadius: "12px",
-  },
-};

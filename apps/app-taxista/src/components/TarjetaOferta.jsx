@@ -2,47 +2,43 @@ export default function TarjetaOferta({ oferta, onAceptar, onRechazar }) {
   if (!oferta) return null;
 
   return (
-    <div style={styles.card}>
-      <h2>Nueva oferta</h2>
-      <p><strong>Cliente:</strong> {oferta.solicitud.nombreCliente}</p>
-      <p><strong>Teléfono:</strong> {oferta.solicitud.telefonoCliente}</p>
-      <p><strong>Recogida:</strong> {oferta.solicitud.direccionRecogida}</p>
+    <section className="oferta-card">
+      <div className="oferta-badge">Nueva oferta</div>
 
-      <div style={styles.actions}>
-        <button style={styles.accept} onClick={() => onAceptar(oferta.ofertaId)}>
+      <h2 className="oferta-title">Servicio disponible</h2>
+
+      <div className="oferta-info">
+        <p>
+          <span>Cliente</span>
+          <strong>{oferta.solicitud.nombreCliente}</strong>
+        </p>
+
+        <p>
+          <span>Teléfono</span>
+          <strong>{oferta.solicitud.telefonoCliente}</strong>
+        </p>
+
+        <p>
+          <span>Recogida</span>
+          <strong>{oferta.solicitud.direccionRecogida}</strong>
+        </p>
+      </div>
+
+      <div className="oferta-actions">
+        <button
+          className="btn-aceptar"
+          onClick={() => onAceptar(oferta.ofertaId)}
+        >
           Aceptar
         </button>
-        <button style={styles.reject} onClick={() => onRechazar(oferta.ofertaId)}>
+
+        <button
+          className="btn-rechazar"
+          onClick={() => onRechazar(oferta.ofertaId)}
+        >
           Rechazar
         </button>
       </div>
-    </div>
+    </section>
   );
 }
-
-const styles = {
-  card: {
-    border: "1px solid #ddd",
-    borderRadius: "12px",
-    padding: "16px",
-    marginTop: "16px",
-    background: "#fff",
-  },
-  actions: {
-    display: "flex",
-    gap: "12px",
-    marginTop: "12px",
-  },
-  accept: {
-    padding: "10px 16px",
-    borderRadius: "8px",
-    border: "none",
-    cursor: "pointer",
-  },
-  reject: {
-    padding: "10px 16px",
-    borderRadius: "8px",
-    border: "none",
-    cursor: "pointer",
-  },
-};
