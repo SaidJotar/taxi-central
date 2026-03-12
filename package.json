@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --ignore *.json server.js",
-    "start": "node server.js"
+    "dev:twilio": "nodemon --ignore *.json serverSoloTwilio.js",
+    "start": "node server.js",
+    "start:twilio": "node serverSoloTwilio.js"
   },
   "keywords": [],
   "author": "",
