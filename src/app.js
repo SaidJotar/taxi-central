@@ -31,10 +31,6 @@ app.get("/", (req, res) => {
   res.send("Servidor taxi-ai funcionando");
 });
 
-//app.get("/solicitudes", (req, res) => {
-//  res.json(leerJsonArray("solicitudes.json"));
-//});
-
 app.get("/solicitudes", async (req, res) => {
   try {
     const solicitudes = await prisma.solicitudViaje.findMany({
@@ -48,10 +44,6 @@ app.get("/solicitudes", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-//app.get("/taxis", (req, res) => {
-//  res.json(leerJsonArray("taxis.json"));
-//});
 
 app.get("/taxistas", async (req, res) => {
   try {
