@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const cors = require("cors");
 const { port } = require("./config");
 const { registerIncomingCallRoute } = require("./routes/incomingCall");
 const { registerMediaStream } = require("./ws/mediaStream");
@@ -9,6 +10,17 @@ const { iniciarSocket } = require("./socket");
 const { obtenerIo } = require("./socket");
 
 const app = express();
+
+app.use(cors({
+  origin: [
+    "https://sjaceuta.es",
+    "https://www.sjaceuta.es",
+    "https://api.sjaceuta.es",
+    "https://taxista.sjaceuta.es"
+  ],
+  credentials: true,
+}));
+
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
