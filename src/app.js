@@ -95,7 +95,7 @@ app.get("/ofertas", async (req, res) => {
         },
       },
       orderBy: {
-        ofrecidaEn: "desconectado",
+        ofrecidaEn: "desc",
       },
     });
 
