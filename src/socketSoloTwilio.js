@@ -120,7 +120,7 @@ function iniciarSocket(server) {
 
         if (!solicitudId || !taxistaId) {
           socket.emit("error:general", {
-            message: "Faltan solicitudId o taxistaId",
+            message: "Faltan datos para terminar el servicio",
           });
           return;
         }
@@ -135,6 +135,13 @@ function iniciarSocket(server) {
         if (!solicitud) {
           socket.emit("error:general", {
             message: "Solicitud no encontrada",
+          });
+          return;
+        }
+
+        if (!solicitud.asignacion || solicitud.asignacion.taxistaId !== taxistaId) {
+          socket.emit("error:general", {
+            message: "No autorizado para terminar este servicio",
           });
           return;
         }
@@ -165,6 +172,15 @@ function iniciarSocket(server) {
         });
 
         console.log(`✅ Servicio ${solicitudId} terminado por taxista ${taxistaId}`);
+
+        // IMPORTANTE: intentar lanzar una pendiente en cuanto quede libre
+        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+
+        if (oferta) {
+          console.log(
+            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} tras terminar servicio`
+          );
+        }
       } catch (error) {
         console.error("Error servicio:terminar:", error.message);
         socket.emit("error:general", { message: error.message });

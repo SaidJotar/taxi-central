@@ -230,7 +230,7 @@ function registerIncomingCallRoute(app, llamadas) {
 
         gather.say(
             { language: "es-ES", voice: "alice" },
-            `He entendido esta dirección: ${speech}. Si es correcta, di sí. Si no, di no.`
+            `He entendido esta dirección: ${speech}. Si es correcta di sí, si no, di no.`
         );
 
         res.type("text/xml");
@@ -271,8 +271,8 @@ function registerIncomingCallRoute(app, llamadas) {
                 language: "es-ES",
                 action: `${publicUrl}/incoming-call/direccion`,
                 method: "POST",
-                speechTimeout: "auto",
-                timeout: 5,
+                speechTimeout: 1,
+                timeout: 3,
             });
 
             gather.say(
@@ -294,7 +294,7 @@ function registerIncomingCallRoute(app, llamadas) {
             { language: "es-ES", voice: "alice" },
             "Perfecto. Estamos buscando un taxi disponible."
         );
-        response.pause({ length: 4 });
+
         response.redirect(
             { method: "POST" },
             `${publicUrl}/incoming-call/espera`
@@ -362,7 +362,7 @@ function registerIncomingCallRoute(app, llamadas) {
 
             response.say(
                 { language: "es-ES", voice: "alice" },
-                `Su taxi asignado es ${numeroTaxi}, conducido por ${nombreTaxista}. Gracias por llamar.`
+                `Su taxi asignado es el número ${numeroTaxi}, conducido por ${nombreTaxista}. Gracias por llamar.`
             );
             response.hangup();
 
