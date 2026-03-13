@@ -89,8 +89,11 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
   const { obtenerIo } = require("../socketSoloTwilio");
   const io = obtenerIo();
 
+  const expiresAt = new Date(Date.now() + OFERTA_TIMEOUT_MS).toISOString();
+
   io.to(`taxista:${taxista.id}`).emit("oferta:recibida", {
     ofertaId: oferta.id,
+    expiresAt,
     solicitud: {
       id: solicitud.id,
       nombreCliente: solicitud.nombreCliente,

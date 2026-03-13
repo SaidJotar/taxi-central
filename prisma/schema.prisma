@@ -7,15 +7,18 @@ datasource db {
 }
 
 model Taxista {
-  id             String                @id @default(uuid())
-  nombreCompleto String
-  telefono       String                @unique
-  passwordHash   String
-  estado         EstadoTaxista         @default(desconectado)
-  creadoEn       DateTime              @default(now())
-  asignaciones   AsignacionSolicitud[]
-  ofertas        OfertaSolicitud[]
-  vehiculo       Vehiculo?
+  id                            String                @id @default(uuid())
+  nombreCompleto                String
+  telefono                      String                @unique
+  passwordHash                  String
+  estado                        EstadoTaxista         @default(desconectado)
+  creadoEn                      DateTime              @default(now())
+  asignaciones                  AsignacionSolicitud[]
+  telefonoVerificado            Boolean   @default(false)
+  codigoVerificacion            String?
+  codigoVerificacionExpiraEn    DateTime?
+  ofertas                       OfertaSolicitud[]
+  vehiculo                      Vehiculo?
 }
 
 model Vehiculo {

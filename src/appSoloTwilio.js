@@ -7,7 +7,7 @@ const { registerMediaStream } = require("./ws/mediaStream");
 const { leerJsonArray } = require("./services/storageService");
 const prisma = require("./services/bd");
 const { iniciarSocket } = require("./socketSoloTwilio");
-const { obtenerIo } = require("./socket");
+const { obtenerIo } = require("./socketSoloTwilio");
 const authRoutes = require("./routes/auth");
 
 const app = express();
@@ -49,6 +49,60 @@ app.get("/taxistas", async (req, res) => {
     res.json(taxistas);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+const { buscarSiguienteTaxistaDisponible, emitirOfertaATaxista } = require("./services/ofertasServiceSoloTwilio");
+
+app.post("/test/oferta-real", async (req, res) => {
+  try {
+    const {
+      nombreCliente = "Cliente Test",
+      telefonoCliente = "+34600000000",
+      direccionRecogida = "Gran Vía 25",
+    } = req.body || {};
+
+    const solicitud = await prisma.solicitudViaje.create({
+      data: {
+        nombreCliente,
+        telefonoCliente,
+        direccionRecogida,
+        estado: "pendiente",
+        confirmadaEn: new Date(),
+      },
+    });
+
+    const taxista = await buscarSiguienteTaxistaDisponible(solicitud.id);
+
+    if (!taxista) {
+      return res.status(404).json({
+        ok: false,
+        error: "No hay taxistas disponibles",
+        solicitud,
+      });
+    }
+
+    await prisma.solicitudViaje.update({
+      where: { id: solicitud.id },
+      data: { estado: "ofertada" },
+    });
+
+    const oferta = await emitirOfertaATaxista({
+      solicitud,
+      taxista,
+    });
+
+    res.json({
+      ok: true,
+      solicitudId: solicitud.id,
+      ofertaId: oferta.id,
+      taxistaId: taxista.id,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
   }
 });
 

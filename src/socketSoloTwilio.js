@@ -77,6 +77,61 @@ function iniciarSocket(server) {
       }
     });
 
+    socket.on("servicio:terminar", async ({ solicitudId, taxistaId }) => {
+      try {
+        if (!solicitudId || !taxistaId) {
+          socket.emit("error:general", {
+            message: "Faltan solicitudId o taxistaId",
+          });
+          return;
+        }
+
+        const solicitud = await prisma.solicitudViaje.findUnique({
+          where: { id: solicitudId },
+          include: {
+            asignacion: true,
+          },
+        });
+
+        if (!solicitud) {
+          socket.emit("error:general", {
+            message: "Solicitud no encontrada",
+          });
+          return;
+        }
+
+        await prisma.solicitudViaje.update({
+          where: { id: solicitudId },
+          data: {
+            estado: "completada",
+          },
+        });
+
+        await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            estado: "disponible",
+          },
+        });
+
+        const taxistaActualizado = await prisma.taxista.findUnique({
+          where: { id: taxistaId },
+          include: { vehiculo: true },
+        });
+
+        socket.emit("servicio:terminado_ok", {
+          ok: true,
+          solicitudId,
+          taxista: taxistaActualizado,
+        });
+
+        console.log(`✅ Servicio ${solicitudId} terminado por taxista ${taxistaId}`);
+      } catch (error) {
+        console.error("Error servicio:terminar:", error.message);
+        socket.emit("error:general", { message: error.message });
+      }
+    });
+
     socket.on("taxista:cambiar_estado", async ({ taxistaId, estado }) => {
       try {
         if (!taxistaId || !estado) {
@@ -211,12 +266,16 @@ function iniciarSocket(server) {
             solicitudActualizada?.asignacion?.vehiculo?.numeroTaxi ||
             "su taxi";
 
+          const telefonoTaxista =
+            solicitudActualizada?.asignacion?.taxista?.telefono || null;
+
           llamadaActiva.taxiAsignado = numeroTaxi;
           llamadaActiva.nombreTaxista = nombreTaxista;
+          llamadaActiva.telefonoTaxista = telefonoTaxista;
           llamadaActiva.estado = "asignada";
 
           console.log(
-            `📞 Taxi asignado a la llamada de la solicitud ${oferta.solicitudViajeId}: ${numeroTaxi} - ${nombreTaxista}`
+            `📞 Taxi asignado a la llamada de la solicitud ${oferta.solicitudViajeId}: ${numeroTaxi} - ${nombreTaxista} - ${telefonoTaxista}`
           );
         }
 
@@ -224,7 +283,13 @@ function iniciarSocket(server) {
           ok: true,
           ofertaId,
           solicitudViajeId: oferta.solicitudViajeId,
-          solicitud: solicitudActualizada,
+          solicitud: {
+            id: solicitudActualizada.id,
+            nombreCliente: solicitudActualizada.nombreCliente,
+            telefonoCliente: solicitudActualizada.telefonoCliente,
+            direccionRecogida: solicitudActualizada.direccionRecogida,
+            estado: solicitudActualizada.estado,
+          },
         });
 
         console.log(`✅ Oferta ${ofertaId} aceptada por taxista ${taxistaId}`);

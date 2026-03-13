@@ -1,6 +1,6 @@
 const twilio = require("twilio");
 const { crearSolicitudTaxi } = require("../services/taxiServiceSoloTwilio");
-const { twilioAccountSid, twilioAuthToken, publicUrl } = require("../configSoloTwilio");
+const { twilioAccountSid, twilioAuthToken, twilioPhoneNumber, publicUrl } = require("../configSoloTwilio");
 const client = twilio(twilioAccountSid, twilioAuthToken);
 const {
     guardarLlamadaPorSolicitud,
@@ -30,6 +30,30 @@ function respuestaGather({ texto, action }) {
 
     gather.say(decir(), texto);
     return response;
+}
+
+async function enviarSmsDatosTaxi({ telefonoCliente, nombreTaxista, telefonoTaxista, numeroTaxi }) {
+    if (!telefonoCliente) {
+        console.log("⚠️ No hay teléfono del cliente para enviar SMS");
+        return;
+    }
+
+    const partes = [
+        "Su taxi está de camino. Llegará pronto.",
+        `Taxista: ${nombreTaxista || "No disponible"}.`,
+        `Teléfono: ${telefonoTaxista || "No disponible"}.`,
+        `Número de taxi: ${numeroTaxi || "No disponible"}.`,
+    ];
+
+    const body = partes.join(" ");
+
+    await client.messages.create({
+        body,
+        from: twilioPhoneNumber,
+        to: telefonoCliente,
+    });
+
+    console.log(`📲 SMS enviado a ${telefonoCliente}: ${body}`);
 }
 
 function registerIncomingCallRoute(app, llamadas) {
@@ -88,6 +112,7 @@ function registerIncomingCallRoute(app, llamadas) {
 
         const numeroTaxi = llamada.taxiAsignado || "su taxi";
         const nombreTaxista = llamada.nombreTaxista || "el taxista asignado";
+        const telefonoTaxista = llamada.telefonoTaxista || "No disponible";
 
         response.say(
             { language: "es-ES", voice: "alice" },
@@ -96,10 +121,23 @@ function registerIncomingCallRoute(app, llamadas) {
 
         response.hangup();
 
-        eliminarLlamadaPorSolicitud(solicitudId);
-
         res.type("text/xml");
         res.send(response.toString());
+
+        setImmediate(async () => {
+            try {
+                await enviarSmsDatosTaxi({
+                    telefonoCliente: llamada.telefono,
+                    nombreTaxista,
+                    telefonoTaxista,
+                    numeroTaxi,
+                });
+            } catch (error) {
+                console.error("❌ Error enviando SMS de taxi asignado:", error.message);
+            } finally {
+                eliminarLlamadaPorSolicitud(solicitudId);
+            }
+        });
     });
 
     app.post("/incoming-call/nombre", (req, res) => {
@@ -318,19 +356,38 @@ function registerIncomingCallRoute(app, llamadas) {
         }
 
         if (llamada.taxiAsignado) {
+            const numeroTaxi = llamada.taxiAsignado || "su taxi";
+            const nombreTaxista = llamada.nombreTaxista || "el taxista asignado";
+            const telefonoTaxista = llamada.telefonoTaxista || "No disponible";
+
             response.say(
                 { language: "es-ES", voice: "alice" },
-                `Su taxi asignado es ${llamada.taxiAsignado}, conducido por ${llamada.nombreTaxista || "el taxista asignado"}. Gracias por llamar.`
+                `Su taxi asignado es ${numeroTaxi}, conducido por ${nombreTaxista}. Gracias por llamar.`
             );
             response.hangup();
 
-            if (llamada.referencia) {
-                eliminarLlamadaPorSolicitud(llamada.referencia);
-            }
-            llamadas.delete(callSid);
-
             res.type("text/xml");
-            return res.send(response.toString());
+            res.send(response.toString());
+
+            setImmediate(async () => {
+                try {
+                    await enviarSmsDatosTaxi({
+                        telefonoCliente: llamada.telefono,
+                        nombreTaxista,
+                        telefonoTaxista,
+                        numeroTaxi,
+                    });
+                } catch (error) {
+                    console.error("❌ Error enviando SMS de taxi asignado:", error.message);
+                } finally {
+                    if (llamada.referencia) {
+                        eliminarLlamadaPorSolicitud(llamada.referencia);
+                    }
+                    llamadas.delete(callSid);
+                }
+            });
+
+            return;
         }
 
         if (llamada.estado === "sin_taxista") {

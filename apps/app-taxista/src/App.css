@@ -20,6 +20,7 @@
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
   border: 1px solid #e5e7eb;
   text-align: center;
+  position: relative;
 }
 
 .app-header {
@@ -103,7 +104,7 @@
   border-radius: 999px;
   background: #dbeafe;
   color: #1d4ed8;
-  font-size: 0.82rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -208,12 +209,36 @@
 }
 
 .logout-btn {
-  margin-top: 10px;
-  background: #ef4444;
-  color: white;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+
+  background: none;
   border: none;
+
+  font-size: 22px;
+  cursor: pointer;
+
+  color: #555;
 }
 
 .logout-btn:hover {
-  background: #dc2626;
+  color: red;
+}
+
+.tarjeta-servicio {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+}
+
+.tarjeta-servicio h2 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.oferta-tiempo-urgente {
+  color: red;
 }

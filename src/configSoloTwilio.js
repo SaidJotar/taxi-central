@@ -6,6 +6,7 @@ module.exports = {
     openaiApiKey: process.env.OPENAI_API_KEY,
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
+    twilioPhoneNumber:process.env.TWILIO_PHONE_NUMBER,
     openaiRealtimeUrl:
         "wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=0.4",
     voice: "alloy",
