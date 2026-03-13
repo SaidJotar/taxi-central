@@ -244,90 +244,90 @@ export default function App() {
   };
 
   return (
-    <main className="app-shell">
-      <section className="app-card">
-        <div className="app-header">
-          <p className={`estado-socket ${conectado ? "ok" : "off"}`}>
-            {conectado ? "Conectado" : "Desconectado"}
-          </p>
+<main className="app-shell">
+  <section className="app-card">
+    <button className="logout-btn" onClick={cerrarSesion} title="Cerrar sesión">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M12 2v10" />
+        <path d="M6.2 6.2a9 9 0 1 0 11.6 0" />
+      </svg>
+    </button>
 
-          <h1 className="app-title">
-            {numeroTaxi ? `Taxi ${numeroTaxi}` : "App Taxista"}
-          </h1>
+    <div className="app-header">
+      <p className={`estado-socket ${conectado ? "ok" : "off"}`}>
+        {conectado ? "Conectado" : "Desconectado"}
+      </p>
 
-          <p className="app-subtitle">
-            Estado actual: <strong>{servicioActivo ? "en servicio" : estado}</strong>
-          </p>
-        </div>
+      <h1 className="app-title">
+        {numeroTaxi ? `Taxi ${numeroTaxi}` : "App Taxista"}
+      </h1>
 
-        <div className="actions">
-          <button
-            className={estado === "disponible" ? "activo" : ""}
-            onClick={() => cambiarEstado("disponible")}
-            disabled={!!servicioActivo}
-          >
-            Disponible
-          </button>
+      <p className="app-subtitle">
+        Estado actual: <strong>{servicioActivo ? "en servicio" : estado}</strong>
+      </p>
+    </div>
 
-          <button
-            className={estado === "ocupado" ? "activo" : ""}
-            onClick={() => cambiarEstado("ocupado")}
-            disabled={!!servicioActivo}
-          >
-            Ocupado
-          </button>
+    <div className="actions">
+      <button
+        className={estado === "disponible" ? "activo" : ""}
+        onClick={() => cambiarEstado("disponible")}
+        disabled={!!servicioActivo}
+      >
+        Disponible
+      </button>
 
-          <button
-            className={estado === "desconectado" ? "activo" : ""}
-            onClick={() => cambiarEstado("desconectado")}
-            disabled={!!servicioActivo}
-          >
-            Desconectado
-          </button>
+      <button
+        className={estado === "ocupado" ? "activo" : ""}
+        onClick={() => cambiarEstado("ocupado")}
+        disabled={!!servicioActivo}
+      >
+        Ocupado
+      </button>
 
-          <button className="logout-btn" onClick={cerrarSesion} title="Cerrar sesión">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 2v10" />
-              <path d="M6.2 6.2a9 9 0 1 0 11.6 0" />
-            </svg>
-          </button>
-        </div>
+      <button
+        className={estado === "desconectado" ? "activo" : ""}
+        onClick={() => cambiarEstado("desconectado")}
+        disabled={!!servicioActivo}
+      >
+        Desconectado
+      </button>
+    </div>
 
-        <TarjetaOferta
-          oferta={oferta}
-          onAceptar={aceptarOferta}
-          onRechazar={rechazarOferta}
-        />
+    <TarjetaOferta
+      oferta={oferta}
+      onAceptar={aceptarOferta}
+      onRechazar={rechazarOferta}
+    />
 
-        {servicioActivo && (
-          <section className="tarjeta-servicio">
-            <h2>En servicio</h2>
-            <p>
-              <strong>Cliente:</strong> {servicioActivo.nombreCliente}
-            </p>
-            <p>
-              <strong>Teléfono:</strong> {servicioActivo.telefonoCliente}
-            </p>
-            <p>
-              <strong>Recogida:</strong> {servicioActivo.direccionRecogida}
-            </p>
+    {servicioActivo && (
+      <section className="tarjeta-servicio">
+        <h2>En servicio</h2>
+        <p>
+          <strong>Cliente:</strong> {servicioActivo.nombreCliente}
+        </p>
+        <p>
+          <strong>Teléfono:</strong> {servicioActivo.telefonoCliente}
+        </p>
+        <p>
+          <strong>Recogida:</strong> {servicioActivo.direccionRecogida}
+        </p>
 
-            <button className="activo" onClick={terminarServicio}>
-              Terminado
-            </button>
-          </section>
-        )}
-
-        <audio ref={audioRef} src="/notificacion.mp3" preload="auto" />
+        <button className="activo" onClick={terminarServicio}>
+          Terminado
+        </button>
       </section>
-    </main>
+    )}
+
+    <audio ref={audioRef} src="/notificacion.mp3" preload="auto" />
+  </section>
+</main>
   );
 }
