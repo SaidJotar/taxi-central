@@ -14,6 +14,7 @@ const {
   twilioAuthToken,
   publicUrl,
 } = require("./configSoloTwilio");
+const { verificarToken } = require("./services/authToken");
 
 const twilioClient =
   twilioAccountSid && twilioAuthToken
@@ -37,48 +38,86 @@ function iniciarSocket(server) {
     },
   });
 
-  io.on("connection", (socket) => {
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      console.log("token recibido en socket:", !!token);
+
+      if (!token) {
+        return next(new Error("Token no proporcionado"));
+      }
+
+      const payload = verificarToken(token);
+      console.log("payload token:", payload);
+
+      if (!payload || payload.tipo !== "taxista") {
+        return next(new Error("Token inválido"));
+      }
+
+      socket.taxistaAuth = {
+        taxistaId: payload.sub,
+        telefono: payload.telefono,
+      };
+
+      next();
+    } catch (error) {
+      console.error("error auth socket:", error.message);
+      next(new Error("No autorizado"));
+    }
+  });
+
+  io.on("connection", async (socket) => {
     console.log("🟢 Taxista conectado por socket:", socket.id);
 
-    socket.on("taxista:conectar", async ({ taxistaId }) => {
-      try {
-        if (!taxistaId) {
-          socket.emit("error:general", {
-            message: "Falta taxistaId en taxista:conectar",
-          });
-          return;
-        }
+    try {
+      const taxistaId = socket.taxistaAuth?.taxistaId;
 
-        console.log("➡️ taxista:conectar recibido para", taxistaId);
+      if (!taxistaId) {
+        console.log("❌ Socket sin taxistaAuth");
+        socket.disconnect();
+        return;
+      }
 
-        socket.join(`taxista:${taxistaId}`);
+      socket.join(`taxista:${taxistaId}`);
+      console.log(`✅ Taxista ${taxistaId} unido a sala taxista:${taxistaId}`);
+      console.log("rooms del socket:", [...socket.rooms]);
 
-        const taxista = await prisma.taxista.findUnique({
-          where: { id: taxistaId },
-          include: { vehiculo: true },
-        });
+      const taxista = await prisma.taxista.findUnique({
+        where: { id: taxistaId },
+        include: { vehiculo: true },
+      });
 
-        if (!taxista) {
-          socket.emit("error:general", {
-            message: "Taxista no encontrado",
-          });
-          return;
-        }
-
-        console.log(`✅ Taxista ${taxistaId} unido a sala taxista:${taxistaId}`);
-
+      if (taxista) {
         socket.emit("taxista:conectado", {
           ok: true,
           taxista,
         });
+      }
+    } catch (error) {
+      console.error("Error al conectar taxista:", error.message);
+      socket.emit("error:general", { message: error.message });
+    }
+
+    socket.on("taxista:conectar", async () => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId) {
+          socket.emit("error:general", {
+            message: "No autorizado",
+          });
+          return;
+        }
       } catch (error) {
         console.error("Error taxista:conectar:", error.message);
         socket.emit("error:general", { message: error.message });
       }
     });
 
-    socket.on("servicio:terminar", async ({ solicitudId, taxistaId }) => {
+    socket.on("servicio:terminar", async ({ solicitudId }) => {
       try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
         if (!solicitudId || !taxistaId) {
           socket.emit("error:general", {
             message: "Faltan solicitudId o taxistaId",
@@ -132,11 +171,15 @@ function iniciarSocket(server) {
       }
     });
 
-    socket.on("taxista:cambiar_estado", async ({ taxistaId, estado }) => {
+    socket.on("taxista:cambiar_estado", async ({ estado }) => {
       try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        console.log("taxistaId del token:", taxistaId);
+
         if (!taxistaId || !estado) {
           socket.emit("error:general", {
-            message: "Faltan taxistaId o estado",
+            message: "Faltan credenciales o estado",
           });
           return;
         }
@@ -169,8 +212,10 @@ function iniciarSocket(server) {
       }
     });
 
-    socket.on("oferta:aceptar", async ({ ofertaId, taxistaId }) => {
+    socket.on("oferta:aceptar", async ({ ofertaId }) => {
       try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
         if (!ofertaId || !taxistaId) {
           socket.emit("error:general", {
             message: "Faltan ofertaId o taxistaId",

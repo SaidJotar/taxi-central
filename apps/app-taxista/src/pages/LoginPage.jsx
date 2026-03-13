@@ -43,9 +43,19 @@ export default function LoginPage({ onLogin }) {
         const data = await res.json();
 
         if (!res.ok) {
+            if (data.requiresVerification) {
+                setTelefonoPendiente(data.telefono || form.telefono);
+                setModo("verify");
+                setCodigo("");
+                setError("");
+                setSuccess("Debes verificar tu teléfono. Te enviamos un nuevo código si lo necesitas.");
+                return;
+            }
+
             throw new Error(data.error || "Error al iniciar sesión");
         }
 
+        localStorage.setItem("token", data.token);
         localStorage.setItem("taxista", JSON.stringify(data.taxista));
         onLogin(data.taxista);
         window.location.href = `/?taxista=${data.taxista.id}`;
@@ -61,6 +71,7 @@ export default function LoginPage({ onLogin }) {
         });
 
         const data = await res.json();
+        console.log("respuesta login:", data);
 
         if (!res.ok) {
             throw new Error(data.error || "Error en el registro");
@@ -95,6 +106,7 @@ export default function LoginPage({ onLogin }) {
                 throw new Error(data.error || "Código incorrecto");
             }
 
+            localStorage.setItem("token", data.token);
             localStorage.setItem("taxista", JSON.stringify(data.taxista));
             onLogin(data.taxista);
             window.location.href = `/?taxista=${data.taxista.id}`;

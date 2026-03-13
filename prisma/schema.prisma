@@ -17,6 +17,7 @@ model Taxista {
   telefonoVerificado            Boolean   @default(false)
   codigoVerificacion            String?
   codigoVerificacionExpiraEn    DateTime?
+  ultimoEnvioCodigo             DateTime?
   ofertas                       OfertaSolicitud[]
   vehiculo                      Vehiculo?
 }

@@ -7,3 +7,10 @@ export const socket = io(URL_SOCKET, {
   transports: ["websocket", "polling"],
   withCredentials: true,
 });
+
+export function conectarSocketConToken(token) {
+  socket.auth = { token };
+  if (!socket.connected) {
+    socket.connect();
+  }
+}

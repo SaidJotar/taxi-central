@@ -5,6 +5,8 @@ import LoginPage from "./pages/LoginPage";
 import "./App.css";
 
 export default function App() {
+  const token = localStorage.getItem("token");
+
   const taxistaLocal = JSON.parse(localStorage.getItem("taxista") || "null");
 
   const [taxista, setTaxista] = useState(taxistaLocal);
@@ -85,11 +87,23 @@ export default function App() {
   useEffect(() => {
     if (!taxistaId) return;
 
+    if (!token) return;
+    socket.auth = { token };
     socket.connect();
 
     socket.on("connect", () => {
       setConectado(true);
-      socket.emit("taxista:conectar", { taxistaId });
+    });
+
+    socket.on("connect_error", (err) => {
+      console.log("Error de autenticación socket:", err.message);
+
+      if (err.message === "No autorizado" || err.message === "Token no proporcionado") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("taxista");
+
+        window.location.href = "/";
+      }
     });
 
     socket.on("disconnect", () => {
@@ -191,7 +205,6 @@ export default function App() {
 
   const cambiarEstado = (nuevoEstado) => {
     socket.emit("taxista:cambiar_estado", {
-      taxistaId,
       estado: nuevoEstado,
     });
   };
@@ -218,9 +231,16 @@ export default function App() {
 
   const cerrarSesion = () => {
     pararSonidoOferta();
-    socket.disconnect();
+
+    try {
+      socket.off(); // elimina todos los listeners
+      socket.disconnect();
+    } catch (e) { }
+
+    localStorage.removeItem("token");
     localStorage.removeItem("taxista");
-    window.location.href = "/";
+
+    window.location.replace("/");
   };
 
   return (

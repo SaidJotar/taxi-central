@@ -2,18 +2,43 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const twilio = require("twilio");
 const prisma = require("../services/bd");
+const { firmarTokenTaxista } = require("../services/authToken");
 const {
   twilioAccountSid,
   twilioAuthToken,
   twilioPhoneNumber,
 } = require("../configSoloTwilio");
 
+const rateLimit = require("express-rate-limit");
+
 const router = express.Router();
+
+/* -------------------- RATE LIMIT -------------------- */
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Demasiados intentos, prueba más tarde" },
+});
+
+const smsLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: { error: "Demasiados SMS enviados, espera unos minutos" },
+});
+
+router.use("/login", loginLimiter);
+router.use("/resend-code", smsLimiter);
+router.use("/register", smsLimiter);
+
+/* -------------------- TWILIO -------------------- */
 
 const twilioClient =
   twilioAccountSid && twilioAuthToken
     ? twilio(twilioAccountSid, twilioAuthToken)
     : null;
+
+/* -------------------- UTILIDADES -------------------- */
 
 function generarCodigo() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -39,7 +64,7 @@ function normalizarTelefono(telefono) {
 
 async function enviarCodigoSMS(telefono, codigo) {
   if (!twilioClient) {
-    throw new Error("Twilio no está configurado");
+    throw new Error("Twilio no configurado");
   }
 
   await twilioClient.messages.create({
@@ -48,6 +73,8 @@ async function enviarCodigoSMS(telefono, codigo) {
     to: telefono,
   });
 }
+
+/* -------------------- REGISTER -------------------- */
 
 router.post("/register", async (req, res) => {
   try {
@@ -67,6 +94,12 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    if (password.length < 6) {
+      return res.status(400).json({
+        error: "La contraseña debe tener al menos 6 caracteres",
+      });
+    }
+
     const telefonoNormalizado = normalizarTelefono(telefono);
 
     const existente = await prisma.taxista.findUnique({
@@ -80,6 +113,7 @@ router.post("/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+
     const codigo = generarCodigo();
     const expiraEn = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -92,6 +126,7 @@ router.post("/register", async (req, res) => {
         telefonoVerificado: false,
         codigoVerificacion: codigo,
         codigoVerificacionExpiraEn: expiraEn,
+        ultimoEnvioCodigo: new Date(),
         vehiculo: {
           create: {
             numeroTaxi,
@@ -101,9 +136,7 @@ router.post("/register", async (req, res) => {
           },
         },
       },
-      include: {
-        vehiculo: true,
-      },
+      include: { vehiculo: true },
     });
 
     await enviarCodigoSMS(telefonoNormalizado, codigo);
@@ -111,16 +144,17 @@ router.post("/register", async (req, res) => {
     return res.status(201).json({
       ok: true,
       message: "Te hemos enviado un código por SMS para verificar tu teléfono",
-      taxistaId: taxista.id,
       telefono: taxista.telefono,
     });
   } catch (error) {
     console.error("Error /auth/register:", error);
     return res.status(500).json({
-      error: error.message,
+      error: "Error interno",
     });
   }
 });
+
+/* -------------------- VERIFY PHONE -------------------- */
 
 router.post("/verify-phone", async (req, res) => {
   try {
@@ -148,26 +182,16 @@ router.post("/verify-phone", async (req, res) => {
     if (taxista.telefonoVerificado) {
       return res.json({
         ok: true,
-        message: "El teléfono ya estaba verificado",
-        taxista: {
-          id: taxista.id,
-          nombreCompleto: taxista.nombreCompleto,
-          telefono: taxista.telefono,
-          estado: taxista.estado,
-          vehiculo: taxista.vehiculo,
-        },
+        message: "Teléfono ya verificado",
       });
     }
 
-    if (!taxista.codigoVerificacion || !taxista.codigoVerificacionExpiraEn) {
+    if (
+      !taxista.codigoVerificacion ||
+      new Date() > new Date(taxista.codigoVerificacionExpiraEn)
+    ) {
       return res.status(400).json({
-        error: "No hay ningún código activo para este teléfono",
-      });
-    }
-
-    if (new Date() > new Date(taxista.codigoVerificacionExpiraEn)) {
-      return res.status(400).json({
-        error: "El código ha expirado",
+        error: "Código expirado",
       });
     }
 
@@ -184,14 +208,14 @@ router.post("/verify-phone", async (req, res) => {
         codigoVerificacion: null,
         codigoVerificacionExpiraEn: null,
       },
-      include: {
-        vehiculo: true,
-      },
+      include: { vehiculo: true },
     });
+
+    const token = firmarTokenTaxista(taxistaActualizado);
 
     return res.json({
       ok: true,
-      message: "Teléfono verificado correctamente",
+      token,
       taxista: {
         id: taxistaActualizado.id,
         nombreCompleto: taxistaActualizado.nombreCompleto,
@@ -202,20 +226,18 @@ router.post("/verify-phone", async (req, res) => {
     });
   } catch (error) {
     console.error("Error /auth/verify-phone:", error);
-    return res.status(500).json({
-      error: error.message,
-    });
+    return res.status(500).json({ error: "Error interno" });
   }
 });
+
+/* -------------------- RESEND CODE -------------------- */
 
 router.post("/resend-code", async (req, res) => {
   try {
     const { telefono } = req.body;
 
     if (!telefono) {
-      return res.status(400).json({
-        error: "Falta el teléfono",
-      });
+      return res.status(400).json({ error: "Falta el teléfono" });
     }
 
     const telefonoNormalizado = normalizarTelefono(telefono);
@@ -225,14 +247,22 @@ router.post("/resend-code", async (req, res) => {
     });
 
     if (!taxista) {
-      return res.status(404).json({
-        error: "Taxista no encontrado",
-      });
+      return res.status(404).json({ error: "Taxista no encontrado" });
     }
 
     if (taxista.telefonoVerificado) {
       return res.status(400).json({
         error: "Este teléfono ya está verificado",
+      });
+    }
+
+    /* evitar spam de SMS */
+    if (
+      taxista.ultimoEnvioCodigo &&
+      Date.now() - new Date(taxista.ultimoEnvioCodigo).getTime() < 60000
+    ) {
+      return res.status(429).json({
+        error: "Espera un minuto antes de pedir otro código",
       });
     }
 
@@ -244,6 +274,7 @@ router.post("/resend-code", async (req, res) => {
       data: {
         codigoVerificacion: codigo,
         codigoVerificacionExpiraEn: expiraEn,
+        ultimoEnvioCodigo: new Date(),
       },
     });
 
@@ -255,11 +286,11 @@ router.post("/resend-code", async (req, res) => {
     });
   } catch (error) {
     console.error("Error /auth/resend-code:", error);
-    return res.status(500).json({
-      error: error.message,
-    });
+    return res.status(500).json({ error: "Error interno" });
   }
 });
+
+/* -------------------- LOGIN -------------------- */
 
 router.post("/login", async (req, res) => {
   try {
@@ -267,69 +298,7 @@ router.post("/login", async (req, res) => {
 
     if (!telefono || !password) {
       return res.status(400).json({
-        error: "Faltan teléfono o contraseña",
-      });
-    }
-
-    const telefonoNormalizado = normalizarTelefono(telefono);
-
-    console.log("telefono recibido:", telefono);
-    console.log("telefono normalizado:", telefonoNormalizado);
-
-    const taxista = await prisma.taxista.findUnique({
-      where: { telefono: telefonoNormalizado },
-      include: { vehiculo: true },
-    });
-
-    console.log("taxista encontrado:", taxista ? taxista.telefono : null);
-
-    if (!taxista) {
-      return res.status(401).json({
         error: "Credenciales incorrectas",
-      });
-    }
-
-    const passwordOk = await bcrypt.compare(password, taxista.passwordHash);
-    console.log("passwordOk:", passwordOk);
-
-    if (!passwordOk) {
-      return res.status(401).json({
-        error: "Credenciales incorrectas",
-      });
-    }
-
-    if (!taxista.telefonoVerificado) {
-      return res.status(403).json({
-        error: "Debes verificar tu teléfono antes de iniciar sesión",
-        requiresVerification: true,
-        telefono: taxista.telefono,
-      });
-    }
-
-    res.json({
-      ok: true,
-      taxista: {
-        id: taxista.id,
-        nombreCompleto: taxista.nombreCompleto,
-        telefono: taxista.telefono,
-        estado: taxista.estado,
-        vehiculo: taxista.vehiculo,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: error.message,
-    });
-  }
-});
-
-router.post("/login", async (req, res) => {
-  try {
-    const { telefono, password } = req.body;
-
-    if (!telefono || !password) {
-      return res.status(400).json({
-        error: "Faltan teléfono o contraseña",
       });
     }
 
@@ -340,7 +309,9 @@ router.post("/login", async (req, res) => {
       include: { vehiculo: true },
     });
 
+    /* evitar enumeración de usuarios */
     if (!taxista) {
+      await bcrypt.compare(password, "$2b$10$invalidhashforsecurity");
       return res.status(401).json({
         error: "Credenciales incorrectas",
       });
@@ -361,9 +332,12 @@ router.post("/login", async (req, res) => {
         telefono: taxista.telefono,
       });
     }
+
+    const token = firmarTokenTaxista(taxista);
 
     return res.json({
       ok: true,
+      token,
       taxista: {
         id: taxista.id,
         nombreCompleto: taxista.nombreCompleto,
@@ -374,9 +348,7 @@ router.post("/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Error /auth/login:", error);
-    return res.status(500).json({
-      error: error.message,
-    });
+    return res.status(500).json({ error: "Error interno" });
   }
 });
 
