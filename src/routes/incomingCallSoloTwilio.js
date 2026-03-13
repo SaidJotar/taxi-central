@@ -225,7 +225,7 @@ function registerIncomingCallRoute(app, llamadas) {
             action: `${publicUrl}/incoming-call/confirmar-direccion`,
             method: "POST",
             speechTimeout: "auto",
-            timeout: 5,
+            timeout: 3,
         });
 
         gather.say(
@@ -259,6 +259,25 @@ function registerIncomingCallRoute(app, llamadas) {
             return res.send(response.toString());
         }
 
+        if (!speech) {
+            const gather = response.gather({
+                input: "speech",
+                language: "es-ES",
+                action: `${publicUrl}/incoming-call/confirmar-direccion`,
+                method: "POST",
+                speechTimeout: "auto",
+                timeout: 3,
+            });
+
+            gather.say(
+                { language: "es-ES", voice: "alice" },
+                "No he entendido si es correcta. Di sí o di no."
+            );
+
+            res.type("text/xml");
+            return res.send(response.toString());
+        }
+
         const confirma = speech.includes("sí") || speech.includes("si");
 
         if (!confirma) {
@@ -271,8 +290,8 @@ function registerIncomingCallRoute(app, llamadas) {
                 language: "es-ES",
                 action: `${publicUrl}/incoming-call/direccion`,
                 method: "POST",
-                speechTimeout: 1,
-                timeout: 3,
+                speechTimeout: "auto",
+                timeout: 5,
             });
 
             gather.say(
