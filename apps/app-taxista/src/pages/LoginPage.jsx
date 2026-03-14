@@ -71,7 +71,6 @@ export default function LoginPage({ onLogin }) {
         });
 
         const data = await res.json();
-        console.log("respuesta login:", data);
 
         if (!res.ok) {
             throw new Error(data.error || "Error en el registro");

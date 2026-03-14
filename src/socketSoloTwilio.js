@@ -49,14 +49,12 @@ function iniciarSocket(server) {
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token;
-      console.log("token recibido en socket:", !!token);
 
       if (!token) {
         return next(new Error("Token no proporcionado"));
       }
 
       const payload = verificarToken(token);
-      console.log("payload token:", payload);
 
       if (!payload || payload.tipo !== "taxista") {
         return next(new Error("Token inválido"));
@@ -75,20 +73,16 @@ function iniciarSocket(server) {
   });
 
   io.on("connection", async (socket) => {
-    console.log("🟢 Taxista conectado por socket:", socket.id);
 
     try {
       const taxistaId = socket.taxistaAuth?.taxistaId;
 
       if (!taxistaId) {
-        console.log("❌ Socket sin taxistaAuth");
         socket.disconnect();
         return;
       }
 
       socket.join(`taxista:${taxistaId}`);
-      console.log(`✅ Taxista ${taxistaId} unido a sala taxista:${taxistaId}`);
-      console.log("rooms del socket:", [...socket.rooms]);
 
       const taxista = await prisma.taxista.findUnique({
         where: { id: taxistaId },
@@ -172,76 +166,8 @@ function iniciarSocket(server) {
 
         console.log(`✅ Taxista ${taxistaId} confirmado en parada ${paradaId}`);
 
-        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+        await intentarOfertarSolicitudPendienteATaxista(taxistaId);
 
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al entrar en parada`
-          );
-        }
-      } catch (error) {
-        console.error("Error taxista:confirmar_parada:", error.message);
-        socket.emit("error:general", { message: error.message });
-      }
-    });
-
-    socket.on("taxista:confirmar_parada", async ({ paradaId }) => {
-      try {
-        const taxistaId = socket.taxistaAuth?.taxistaId;
-
-        if (!taxistaId || !paradaId) {
-          socket.emit("error:general", {
-            message: "Faltan datos para confirmar parada",
-          });
-          return;
-        }
-
-        const sugerencia = sugerenciasParada.get(taxistaId);
-
-        if (!sugerencia || sugerencia.paradaId !== paradaId) {
-          socket.emit("error:general", {
-            message: "No hay sugerencia de parada válida",
-          });
-          return;
-        }
-
-        if (Date.now() > sugerencia.expiraEn) {
-          sugerenciasParada.delete(taxistaId);
-          socket.emit("error:general", {
-            message: "La sugerencia de parada ha expirado",
-          });
-          return;
-        }
-
-        sugerenciasParada.delete(taxistaId);
-
-        const taxista = await prisma.taxista.update({
-          where: { id: taxistaId },
-          data: {
-            paradaId,
-            enParadaDesde: new Date(),
-            estado: "disponible",
-          },
-          include: {
-            vehiculo: true,
-            parada: true,
-          },
-        });
-
-        socket.emit("taxista:parada_confirmada", {
-          ok: true,
-          taxista,
-        });
-
-        console.log(`✅ Taxista ${taxistaId} confirmado en parada ${paradaId}`);
-
-        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
-
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al entrar en parada`
-          );
-        }
       } catch (error) {
         console.error("Error taxista:confirmar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -305,16 +231,9 @@ function iniciarSocket(server) {
           taxista: taxistaActualizado,
         });
 
-        console.log(`✅ Servicio ${solicitudId} terminado por taxista ${taxistaId}`);
-
         // IMPORTANTE: intentar lanzar una pendiente en cuanto quede libre
-        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+        intentarOfertarSolicitudPendienteATaxista(taxistaId);
 
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} tras terminar servicio`
-          );
-        }
       } catch (error) {
         console.error("Error servicio:terminar:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -324,8 +243,6 @@ function iniciarSocket(server) {
     socket.on("taxista:cambiar_estado", async ({ estado }) => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
-
-        console.log("taxistaId del token:", taxistaId);
 
         if (!taxistaId || !estado) {
           socket.emit("error:general", {
@@ -352,16 +269,8 @@ function iniciarSocket(server) {
           taxista,
         });
 
-        console.log(`🔄 Estado taxista ${taxistaId} -> ${estado}`);
-
         if (estado === "disponible") {
-          const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
-
-          if (oferta) {
-            console.log(
-              `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId}`
-            );
-          }
+          await intentarOfertarSolicitudPendienteATaxista(taxistaId);
         }
       } catch (error) {
         console.error("Error taxista:cambiar_estado:", error.message);
@@ -456,9 +365,6 @@ function iniciarSocket(server) {
 
         const llamadaActiva = obtenerLlamadaPorSolicitud(oferta.solicitudViajeId);
 
-        console.log("📞 Buscando llamada activa para solicitud:", oferta.solicitudViajeId);
-        console.log("📞 llamadaActiva:", llamadaActiva);
-
         if (llamadaActiva) {
           const nombreTaxista =
             solicitudActualizada?.asignacion?.taxista?.nombreCompleto ||
@@ -475,10 +381,6 @@ function iniciarSocket(server) {
           llamadaActiva.nombreTaxista = nombreTaxista;
           llamadaActiva.telefonoTaxista = telefonoTaxista;
           llamadaActiva.estado = "asignada";
-
-          console.log(
-            `📞 Taxi asignado a la llamada de la solicitud ${oferta.solicitudViajeId}: ${numeroTaxi} - ${nombreTaxista} - ${telefonoTaxista}`
-          );
         }
 
         socket.emit("oferta:aceptada_ok", {
@@ -527,15 +429,8 @@ function iniciarSocket(server) {
           taxista,
         });
 
-        console.log(`🚖 Taxista ${taxistaId} llegó a parada ${paradaId}`);
+        await intentarOfertarSolicitudPendienteATaxista(taxistaId);
 
-        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
-
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al llegar a parada`
-          );
-        }
       } catch (error) {
         console.error("Error taxista:llegar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -579,8 +474,6 @@ function iniciarSocket(server) {
             vehiculo: true,
           },
         });
-
-        console.log(`📍 Ubicación actualizada ${taxistaId}: ${lat}, ${lng}`);
 
         // Si ya está en una parada, comprobar salida automática
         if (taxista.paradaId && taxista.parada) {
@@ -677,9 +570,6 @@ function iniciarSocket(server) {
           expiresAt: new Date(expiraEn).toISOString(),
         });
 
-        console.log(
-          `🚖 Sugerida parada ${paradaCercana.nombre} a taxista ${taxistaId}`
-        );
       } catch (error) {
         console.error("Error taxista:ubicacion:", error.message);
       }
@@ -689,8 +579,6 @@ function iniciarSocket(server) {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
 
-        console.log("➡️ taxista:rechazar_parada", { taxistaId, paradaId, motivo });
-
         if (!taxistaId || !paradaId) {
           socket.emit("error:general", {
             message: "Faltan datos para rechazar parada",
@@ -699,10 +587,8 @@ function iniciarSocket(server) {
         }
 
         const sugerencia = sugerenciasParada.get(taxistaId);
-        console.log("🧠 sugerencia antes de rechazar:", sugerencia);
 
         if (!sugerencia || sugerencia.paradaId !== paradaId) {
-          console.log("⚠️ No había sugerencia válida para rechazar");
           return;
         }
 
@@ -718,9 +604,6 @@ function iniciarSocket(server) {
           motivo: motivo || "rechazada",
         });
 
-        console.log(
-          `❌ Taxista ${taxistaId} rechazó sugerencia de parada ${paradaId}. Motivo: ${motivo || "rechazada"}`
-        );
       } catch (error) {
         console.error("Error taxista:rechazar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -765,17 +648,11 @@ function iniciarSocket(server) {
           ofertaId,
         });
 
-        console.log(`❌ Oferta ${ofertaId} rechazada`);
-
         await programarSiguienteOferta(oferta.solicitudViajeId);
       } catch (error) {
         console.error("Error oferta:rechazar:", error.message);
         socket.emit("error:general", { message: error.message });
       }
-    });
-
-    socket.on("disconnect", () => {
-      console.log("🔴 Socket desconectado:", socket.id);
     });
   });
 

@@ -4,19 +4,14 @@ const { geocodificarDireccion } = require("./geocodingService");
 const { buscarParadaMasCercana } = require("./paradasService");
 
 async function crearSolicitudTaxi(estadoLlamada) {
-  console.log("🚕 Entrando en crearSolicitudTaxi()");
-  console.log("Estado recibido:", JSON.stringify(estadoLlamada, null, 2));
-
   let geo = null;
   let paradaSugerida = null;
 
   try {
     geo = await geocodificarDireccion(estadoLlamada.recogida);
-    console.log("📍 Geocodificación recogida:", geo);
 
     if (geo?.lat != null && geo?.lng != null) {
       paradaSugerida = await buscarParadaMasCercana(geo.lat, geo.lng);
-      console.log("🚖 Parada sugerida:", paradaSugerida);
     }
   } catch (error) {
     console.error("❌ Error preparando solicitud:", error.message);

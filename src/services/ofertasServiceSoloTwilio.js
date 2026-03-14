@@ -86,7 +86,6 @@ async function buscarSiguienteTaxistaDisponible(solicitudViajeId, taxistasExclui
     );
 
     if (taxiParada) {
-      console.log("🚖 Taxi encontrado en parada:", taxiParada.id);
       return taxiParada;
     }
   }
@@ -103,7 +102,6 @@ async function buscarSiguienteTaxistaDisponible(solicitudViajeId, taxistasExclui
     );
 
     if (taxiCercano) {
-      console.log("🚕 Taxi cercano encontrado:", taxiCercano.id);
       return taxiCercano;
     }
   }
@@ -190,8 +188,6 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
     },
   });
 
-  console.log(`📨 Oferta ${oferta.id} enviada a taxista:${taxista.id}`);
-
   programarTimeoutOferta(oferta.id);
 
   return oferta;
@@ -228,10 +224,6 @@ async function programarSiguienteOferta(solicitudViajeId) {
       data: { estado: "sin_taxista" },
     });
 
-    console.log(
-      `❌ No quedan taxistas disponibles para solicitud ${solicitudViajeId}`
-    );
-
     // En Twilio-only no cerramos la llamada aquí.
     // Solo marcamos el estado para que /incoming-call/espera hable al cliente.
     const llamadaActiva = obtenerLlamadaPorSolicitud(solicitudViajeId);
@@ -239,9 +231,6 @@ async function programarSiguienteOferta(solicitudViajeId) {
     if (llamadaActiva) {
       llamadaActiva.estado = "sin_taxista";
       llamadaActiva.sinTaxi = true;
-      console.log(
-        `☎️ Llamada marcada como sin taxi para solicitud ${solicitudViajeId}`
-      );
     }
 
     return;
@@ -279,8 +268,6 @@ function programarTimeoutOferta(ofertaId) {
           respondidaEn: new Date(),
         },
       });
-
-      console.log(`⏰ Oferta ${ofertaId} expirada`);
 
       const { obtenerIo } = require("../socketSoloTwilio");
       const io = obtenerIo();
