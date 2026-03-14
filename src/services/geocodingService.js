@@ -15,7 +15,6 @@ function limpiarDireccion(direccionTexto) {
 async function geocodificarDireccion(direccionTexto) {
   try {
     if (!direccionTexto || !direccionTexto.trim()) {
-      console.log("❌ Dirección vacía para geocodificar");
       return null;
     }
 
@@ -32,9 +31,6 @@ async function geocodificarDireccion(direccionTexto) {
     url.searchParams.set("region", "es");
     url.searchParams.set("language", "es");
 
-    console.log("🌍 Geocodificando con Google:", direccionCompleta);
-    console.log("🌍 URL Google:", url.toString().replace(GOOGLE_MAPS_API_KEY, "HIDDEN"));
-
     const response = await fetch(url.toString(), {
       method: "GET",
     });
@@ -44,7 +40,6 @@ async function geocodificarDireccion(direccionTexto) {
     }
 
     const data = await response.json();
-    console.log("🌍 Respuesta Google geocoding completa:", data);
 
     if (data.status !== "OK" || !Array.isArray(data.results) || data.results.length === 0) {
       console.log("❌ No se encontraron resultados");

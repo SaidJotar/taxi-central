@@ -34,7 +34,6 @@ function respuestaGather({ texto, action }) {
 
 async function enviarSmsDatosTaxi({ telefonoCliente, nombreTaxista, telefonoTaxista, numeroTaxi }) {
     if (!telefonoCliente) {
-        console.log("⚠️ No hay teléfono del cliente para enviar SMS");
         return;
     }
 
@@ -52,8 +51,6 @@ async function enviarSmsDatosTaxi({ telefonoCliente, nombreTaxista, telefonoTaxi
         from: twilioPhoneNumber,
         to: telefonoCliente,
     });
-
-    console.log(`📲 SMS enviado a ${telefonoCliente}: ${body}`);
 }
 
 function registerIncomingCallRoute(app, llamadas) {
@@ -90,13 +87,9 @@ function registerIncomingCallRoute(app, llamadas) {
     });
 
     app.post("/incoming-call/asignada", (req, res) => {
-        console.log(">>> POST /incoming-call/asignada");
-        console.log("query:", req.query);
 
         const solicitudId = req.query.solicitudId;
         const llamada = obtenerLlamadaPorSolicitud(solicitudId);
-
-        console.log("llamada recuperada:", llamada);
 
         const response = new twilio.twiml.VoiceResponse();
 
@@ -145,6 +138,8 @@ function registerIncomingCallRoute(app, llamadas) {
         const callSid = body.CallSid;
         const speech = (body.SpeechResult || "").trim();
 
+        console.log("SpeechResult nombre:", speech);
+
         const llamada = llamadas.get(callSid);
         if (!llamada) {
             const response = new twilio.twiml.VoiceResponse();
@@ -180,7 +175,6 @@ function registerIncomingCallRoute(app, llamadas) {
         const callSid = body.CallSid;
         const speech = (body.SpeechResult || "").trim();
 
-        console.log(">>> POST /incoming-call/direccion");
         console.log("SpeechResult direccion:", speech);
 
         const llamada = llamadas.get(callSid);
@@ -230,7 +224,7 @@ function registerIncomingCallRoute(app, llamadas) {
 
         gather.say(
             { language: "es-ES", voice: "alice" },
-            `He entendido esta dirección: ${speech}. Si es correcta di sí, si no, di no.`
+            `He entendido esta dirección: ${speech}. Si es correcta di es correcta, si no, di no es correcta.`
         );
 
         res.type("text/xml");
@@ -241,11 +235,6 @@ function registerIncomingCallRoute(app, llamadas) {
         const body = req.body || {};
         const callSid = body.CallSid;
         const speech = (body.SpeechResult || "").trim().toLowerCase();
-
-        console.log(">>> POST /incoming-call/confirmar-direccion");
-        console.log("BODY confirmar-direccion:", body);
-        console.log("SpeechResult:", speech);
-        console.log("CallSid:", callSid);
 
         const llamada = llamadas.get(callSid);
         const response = new twilio.twiml.VoiceResponse();
@@ -325,12 +314,8 @@ function registerIncomingCallRoute(app, llamadas) {
 
         setImmediate(async () => {
             try {
-                console.log("🚕 Lanzando crearSolicitudTaxi en segundo plano");
-                console.log("llamada antes de crear solicitud:", llamada);
 
                 const resultado = await crearSolicitudTaxi(llamada);
-
-                console.log("resultado crearSolicitudTaxi:", resultado);
 
                 llamada.solicitudCreada = resultado.ok;
                 llamada.referencia = resultado.referencia || null;
@@ -341,7 +326,6 @@ function registerIncomingCallRoute(app, llamadas) {
 
                 if (resultado.referencia) {
                     guardarLlamadaPorSolicitud(resultado.referencia, llamada);
-                    console.log("💾 Llamada guardada por solicitud:", resultado.referencia);
                 }
             } catch (error) {
                 console.error("❌ Error creando solicitud tras confirmar dirección:", error.message);
@@ -355,10 +339,6 @@ function registerIncomingCallRoute(app, llamadas) {
         const body = req.body || {};
         const callSid = body.CallSid;
         const llamada = llamadas.get(callSid);
-
-        console.log(">>> POST /incoming-call/espera");
-        console.log("callSid:", callSid);
-        console.log("llamada:", llamada);
 
         const response = new twilio.twiml.VoiceResponse();
 
