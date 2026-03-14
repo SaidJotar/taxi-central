@@ -15,6 +15,8 @@ const {
   publicUrl,
 } = require("./configSoloTwilio");
 const { verificarToken } = require("./services/authToken");
+const { buscarParadaCercanaParaEntrada } = require("./services/paradasService");
+const { distanciaMetros } = require("./services/geoUtils");
 
 const twilioClient =
   twilioAccountSid && twilioAuthToken
@@ -22,6 +24,12 @@ const twilioClient =
     : null;
 
 let io = null;
+
+const sugerenciasParada = new Map();
+const RADIO_ENTRADA_PARADA_METROS = 40;
+const RADIO_SALIDA_PARADA_METROS = 80;
+const TIEMPO_CONFIRMACION_PARADA_MS = 20000;
+const COOLDOWN_RECHAZO_PARADA_MS = 60000;
 
 function iniciarSocket(server) {
   io = new Server(server, {
@@ -114,6 +122,132 @@ function iniciarSocket(server) {
       }
     });
 
+    socket.on("taxista:confirmar_parada", async ({ paradaId }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId || !paradaId) {
+          socket.emit("error:general", {
+            message: "Faltan datos para confirmar parada",
+          });
+          return;
+        }
+
+        const sugerencia = sugerenciasParada.get(taxistaId);
+
+        if (!sugerencia || sugerencia.paradaId !== paradaId) {
+          socket.emit("error:general", {
+            message: "No hay sugerencia de parada válida",
+          });
+          return;
+        }
+
+        if (Date.now() > sugerencia.expiraEn) {
+          sugerenciasParada.delete(taxistaId);
+          socket.emit("error:general", {
+            message: "La sugerencia de parada ha expirado",
+          });
+          return;
+        }
+
+        sugerenciasParada.delete(taxistaId);
+
+        const taxista = await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            paradaId,
+            enParadaDesde: new Date(),
+            estado: "disponible",
+          },
+          include: {
+            vehiculo: true,
+            parada: true,
+          },
+        });
+
+        socket.emit("taxista:parada_confirmada", {
+          ok: true,
+          taxista,
+        });
+
+        console.log(`✅ Taxista ${taxistaId} confirmado en parada ${paradaId}`);
+
+        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+
+        if (oferta) {
+          console.log(
+            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al entrar en parada`
+          );
+        }
+      } catch (error) {
+        console.error("Error taxista:confirmar_parada:", error.message);
+        socket.emit("error:general", { message: error.message });
+      }
+    });
+
+    socket.on("taxista:confirmar_parada", async ({ paradaId }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId || !paradaId) {
+          socket.emit("error:general", {
+            message: "Faltan datos para confirmar parada",
+          });
+          return;
+        }
+
+        const sugerencia = sugerenciasParada.get(taxistaId);
+
+        if (!sugerencia || sugerencia.paradaId !== paradaId) {
+          socket.emit("error:general", {
+            message: "No hay sugerencia de parada válida",
+          });
+          return;
+        }
+
+        if (Date.now() > sugerencia.expiraEn) {
+          sugerenciasParada.delete(taxistaId);
+          socket.emit("error:general", {
+            message: "La sugerencia de parada ha expirado",
+          });
+          return;
+        }
+
+        sugerenciasParada.delete(taxistaId);
+
+        const taxista = await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            paradaId,
+            enParadaDesde: new Date(),
+            estado: "disponible",
+          },
+          include: {
+            vehiculo: true,
+            parada: true,
+          },
+        });
+
+        socket.emit("taxista:parada_confirmada", {
+          ok: true,
+          taxista,
+        });
+
+        console.log(`✅ Taxista ${taxistaId} confirmado en parada ${paradaId}`);
+
+        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+
+        if (oferta) {
+          console.log(
+            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al entrar en parada`
+          );
+        }
+      } catch (error) {
+        console.error("Error taxista:confirmar_parada:", error.message);
+        socket.emit("error:general", { message: error.message });
+      }
+    });
+
     socket.on("servicio:terminar", async ({ solicitudId }) => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
@@ -200,10 +334,17 @@ function iniciarSocket(server) {
           return;
         }
 
+        const dataUpdate = { estado };
+
+        if (estado !== "disponible") {
+          dataUpdate.paradaId = null;
+          dataUpdate.enParadaDesde = null;
+        }
+
         const taxista = await prisma.taxista.update({
           where: { id: taxistaId },
-          data: { estado },
-          include: { vehiculo: true },
+          data: dataUpdate,
+          include: { vehiculo: true, parada: true },
         });
 
         socket.emit("taxista:estado_actualizado", {
@@ -356,6 +497,232 @@ function iniciarSocket(server) {
         console.log(`✅ Oferta ${ofertaId} aceptada por taxista ${taxistaId}`);
       } catch (error) {
         console.error("Error oferta:aceptar:", error.message);
+        socket.emit("error:general", { message: error.message });
+      }
+    });
+
+    socket.on("taxista:llegar_parada", async ({ paradaId }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId || !paradaId) {
+          socket.emit("error:general", {
+            message: "Faltan taxistaId o paradaId",
+          });
+          return;
+        }
+
+        const taxista = await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            paradaId,
+            enParadaDesde: new Date(),
+            estado: "disponible",
+          },
+          include: { vehiculo: true, parada: true },
+        });
+
+        socket.emit("taxista:estado_actualizado", {
+          ok: true,
+          taxista,
+        });
+
+        console.log(`🚖 Taxista ${taxistaId} llegó a parada ${paradaId}`);
+
+        const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+
+        if (oferta) {
+          console.log(
+            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al llegar a parada`
+          );
+        }
+      } catch (error) {
+        console.error("Error taxista:llegar_parada:", error.message);
+        socket.emit("error:general", { message: error.message });
+      }
+    });
+
+    socket.on("taxista:ubicacion", async ({ lat, lng }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId) {
+          socket.emit("error:general", {
+            message: "No autorizado",
+          });
+          return;
+        }
+
+        if (typeof lat !== "number" || typeof lng !== "number") {
+          socket.emit("error:general", {
+            message: "Ubicación inválida",
+          });
+          return;
+        }
+
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+          socket.emit("error:general", {
+            message: "Ubicación inválida",
+          });
+          return;
+        }
+
+        const taxista = await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            lat,
+            lng,
+            ubicacionActualizadaEn: new Date(),
+          },
+          include: {
+            parada: true,
+            vehiculo: true,
+          },
+        });
+
+        console.log(`📍 Ubicación actualizada ${taxistaId}: ${lat}, ${lng}`);
+
+        // Si ya está en una parada, comprobar salida automática
+        if (taxista.paradaId && taxista.parada) {
+          const distanciaSalida = distanciaMetros(
+            lat,
+            lng,
+            taxista.parada.lat,
+            taxista.parada.lng
+          );
+
+          const tiempoEnParadaMs = taxista.enParadaDesde
+            ? Date.now() - new Date(taxista.enParadaDesde).getTime()
+            : 0;
+
+          if (
+            tiempoEnParadaMs > 15000 &&
+            distanciaSalida > RADIO_SALIDA_PARADA_METROS
+          ) {
+            const taxistaActualizado = await prisma.taxista.update({
+              where: { id: taxistaId },
+              data: {
+                paradaId: null,
+                enParadaDesde: null,
+              },
+              include: {
+                vehiculo: true,
+                parada: true,
+              },
+            });
+
+            socket.emit("taxista:salio_parada", {
+              ok: true,
+              taxista: taxistaActualizado,
+            });
+
+            console.log(`🚕 Taxista ${taxistaId} salió automáticamente de parada`);
+          }
+
+          return;
+        }
+
+        // Si ya tiene sugerencia pendiente, no enviar otra
+        const pendiente = sugerenciasParada.get(taxistaId);
+        const ahora = Date.now();
+
+        if (pendiente) {
+          // si hay cooldown activo para la misma parada, no insistir
+          if (pendiente.ignoradasHasta && ahora < pendiente.ignoradasHasta) {
+            return;
+          }
+
+          // si hay sugerencia pendiente sin expirar, no duplicar
+          if (pendiente.expiraEn && ahora < pendiente.expiraEn) {
+            return;
+          }
+        }
+
+        const paradaCercana = await buscarParadaCercanaParaEntrada(
+          lat,
+          lng,
+          RADIO_ENTRADA_PARADA_METROS
+        );
+
+        if (!paradaCercana) {
+          return;
+        }
+
+        // Evitar repetir la misma parada durante cooldown
+        if (
+          pendiente &&
+          pendiente.paradaId === paradaCercana.id &&
+          pendiente.ignoradasHasta &&
+          ahora < pendiente.ignoradasHasta
+        ) {
+          return;
+        }
+
+        const expiraEn = ahora + TIEMPO_CONFIRMACION_PARADA_MS;
+
+        sugerenciasParada.set(taxistaId, {
+          paradaId: paradaCercana.id,
+          expiraEn,
+          ignoradasHasta: null,
+        });
+
+        socket.emit("taxista:parada_sugerida", {
+          ok: true,
+          parada: {
+            id: paradaCercana.id,
+            nombre: paradaCercana.nombre,
+            direccion: paradaCercana.direccion,
+            distanciaMetros: Math.round(paradaCercana.distanciaMetros),
+          },
+          expiresAt: new Date(expiraEn).toISOString(),
+        });
+
+        console.log(
+          `🚖 Sugerida parada ${paradaCercana.nombre} a taxista ${taxistaId}`
+        );
+      } catch (error) {
+        console.error("Error taxista:ubicacion:", error.message);
+      }
+    });
+
+    socket.on("taxista:rechazar_parada", async ({ paradaId, motivo }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        console.log("➡️ taxista:rechazar_parada", { taxistaId, paradaId, motivo });
+
+        if (!taxistaId || !paradaId) {
+          socket.emit("error:general", {
+            message: "Faltan datos para rechazar parada",
+          });
+          return;
+        }
+
+        const sugerencia = sugerenciasParada.get(taxistaId);
+        console.log("🧠 sugerencia antes de rechazar:", sugerencia);
+
+        if (!sugerencia || sugerencia.paradaId !== paradaId) {
+          console.log("⚠️ No había sugerencia válida para rechazar");
+          return;
+        }
+
+        sugerenciasParada.set(taxistaId, {
+          paradaId,
+          expiraEn: null,
+          ignoradasHasta: Date.now() + COOLDOWN_RECHAZO_PARADA_MS,
+        });
+
+        socket.emit("taxista:parada_rechazada_ok", {
+          ok: true,
+          paradaId,
+          motivo: motivo || "rechazada",
+        });
+
+        console.log(
+          `❌ Taxista ${taxistaId} rechazó sugerencia de parada ${paradaId}. Motivo: ${motivo || "rechazada"}`
+        );
+      } catch (error) {
+        console.error("Error taxista:rechazar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
       }
     });

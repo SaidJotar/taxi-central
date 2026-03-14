@@ -3,12 +3,17 @@ import { socket } from "./api/socket";
 import TarjetaOferta from "./components/TarjetaOferta";
 import LoginPage from "./pages/LoginPage";
 import "./App.css";
+import ParadaSugeridaCard from "./components/ParadaSugeridaCard";
 
 export default function App() {
+
+  // SOLO LOCAL, NO USAR EN PRODUCCIÓN
+  window.socket = socket;
+
   const token = localStorage.getItem("token");
 
   const taxistaLocal = JSON.parse(localStorage.getItem("taxista") || "null");
-
+  const [paradaSugerida, setParadaSugerida] = useState(null);
   const [taxista, setTaxista] = useState(taxistaLocal);
   const [conectado, setConectado] = useState(false);
   const [estado, setEstado] = useState("desconectado");
@@ -59,6 +64,33 @@ export default function App() {
     }
   };
 
+useEffect(() => {
+  if (!taxistaId) return;
+  if (!conectado) return;
+  if (!navigator.geolocation) return;
+
+  const watchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      socket.emit("taxista:ubicacion", { lat, lng });
+    },
+    (error) => {
+      console.log("Error geolocalización:", error.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 10000,
+    }
+  );
+
+  return () => {
+    navigator.geolocation.clearWatch(watchId);
+  };
+}, [taxistaId, conectado]);
+
   useEffect(() => {
     const desbloquearAudio = () => {
       if (audioRef.current) {
@@ -68,7 +100,7 @@ export default function App() {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
           })
-          .catch(() => {});
+          .catch(() => { });
       }
 
       window.removeEventListener("click", desbloquearAudio);
@@ -109,6 +141,30 @@ export default function App() {
     socket.on("disconnect", () => {
       setConectado(false);
     });
+
+    socket.on("taxista:parada_sugerida", (data) => {
+  setParadaSugerida(data);
+});
+
+socket.on("taxista:parada_confirmada", (data) => {
+  setParadaSugerida(null);
+
+  if (data?.taxista) {
+    setTaxista(data.taxista);
+    localStorage.setItem("taxista", JSON.stringify(data.taxista));
+  }
+});
+
+socket.on("taxista:parada_rechazada_ok", () => {
+  setParadaSugerida(null);
+});
+
+socket.on("taxista:salio_parada", (data) => {
+  if (data?.taxista) {
+    setTaxista(data.taxista);
+    localStorage.setItem("taxista", JSON.stringify(data.taxista));
+  }
+});
 
     socket.on("taxista:estado_actualizado", (data) => {
       setEstado(data.taxista.estado);
@@ -195,6 +251,10 @@ export default function App() {
       socket.off("oferta:rechazada_ok");
       socket.off("oferta:expirada");
       socket.off("servicio:terminado_ok");
+      socket.off("taxista:parada_sugerida");
+socket.off("taxista:parada_confirmada");
+socket.off("taxista:parada_rechazada_ok");
+socket.off("taxista:salio_parada");
       socket.disconnect();
     };
   }, [taxistaId]);
@@ -220,6 +280,14 @@ export default function App() {
     socket.emit("oferta:rechazar", { ofertaId });
   };
 
+  const confirmarParada = (paradaId) => {
+  socket.emit("taxista:confirmar_parada", { paradaId });
+};
+
+const rechazarParada = (paradaId, motivo = "rechazada") => {
+  socket.emit("taxista:rechazar_parada", { paradaId, motivo });
+};
+
   const terminarServicio = () => {
     if (!servicioActivo?.solicitudId) return;
 
@@ -244,90 +312,96 @@ export default function App() {
   };
 
   return (
-<main className="app-shell">
-  <section className="app-card">
-    <button className="logout-btn" onClick={cerrarSesion} title="Cerrar sesión">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="22"
-        height="22"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <path d="M12 2v10" />
-        <path d="M6.2 6.2a9 9 0 1 0 11.6 0" />
-      </svg>
-    </button>
-
-    <div className="app-header">
-      <p className={`estado-socket ${conectado ? "ok" : "off"}`}>
-        {conectado ? "Conectado" : "Desconectado"}
-      </p>
-
-      <h1 className="app-title">
-        {numeroTaxi ? `Taxi ${numeroTaxi}` : "App Taxista"}
-      </h1>
-
-      <p className="app-subtitle">
-        Estado actual: <strong>{servicioActivo ? "en servicio" : estado}</strong>
-      </p>
-    </div>
-
-    <div className="actions">
-      <button
-        className={estado === "disponible" ? "activo" : ""}
-        onClick={() => cambiarEstado("disponible")}
-        disabled={!!servicioActivo}
-      >
-        Disponible
-      </button>
-
-      <button
-        className={estado === "ocupado" ? "activo" : ""}
-        onClick={() => cambiarEstado("ocupado")}
-        disabled={!!servicioActivo}
-      >
-        Ocupado
-      </button>
-
-      <button
-        className={estado === "desconectado" ? "activo" : ""}
-        onClick={() => cambiarEstado("desconectado")}
-        disabled={!!servicioActivo}
-      >
-        Desconectado
-      </button>
-    </div>
-
-    <TarjetaOferta
-      oferta={oferta}
-      onAceptar={aceptarOferta}
-      onRechazar={rechazarOferta}
-    />
-
-    {servicioActivo && (
-      <section className="tarjeta-servicio">
-        <h2>En servicio</h2>
-        <p>
-          <strong>Cliente:</strong> {servicioActivo.nombreCliente}
-        </p>
-        <p>
-          <strong>Teléfono:</strong> {servicioActivo.telefonoCliente}
-        </p>
-        <p>
-          <strong>Recogida:</strong> {servicioActivo.direccionRecogida}
-        </p>
-
-        <button className="activo" onClick={terminarServicio}>
-          Terminado
+    <main className="app-shell">
+      <section className="app-card">
+        <button className="logout-btn" onClick={cerrarSesion} title="Cerrar sesión">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M12 2v10" />
+            <path d="M6.2 6.2a9 9 0 1 0 11.6 0" />
+          </svg>
         </button>
-      </section>
-    )}
 
-    <audio ref={audioRef} src="/notificacion.mp3" preload="auto" />
-  </section>
-</main>
+        <div className="app-header">
+          <p className={`estado-socket ${conectado ? "ok" : "off"}`}>
+            {conectado ? "Conectado" : "Desconectado"}
+          </p>
+
+          <h1 className="app-title">
+            {numeroTaxi ? `Taxi ${numeroTaxi}` : "App Taxista"}
+          </h1>
+
+          <p className="app-subtitle">
+            Estado actual: <strong>{servicioActivo ? "en servicio" : estado}</strong>
+          </p>
+        </div>
+
+        <div className="actions">
+          <button
+            className={estado === "disponible" ? "activo" : ""}
+            onClick={() => cambiarEstado("disponible")}
+            disabled={!!servicioActivo}
+          >
+            Disponible
+          </button>
+
+          <button
+            className={estado === "ocupado" ? "activo" : ""}
+            onClick={() => cambiarEstado("ocupado")}
+            disabled={!!servicioActivo}
+          >
+            Ocupado
+          </button>
+
+          <button
+            className={estado === "desconectado" ? "activo" : ""}
+            onClick={() => cambiarEstado("desconectado")}
+            disabled={!!servicioActivo}
+          >
+            Desconectado
+          </button>
+        </div>
+
+        <TarjetaOferta
+          oferta={oferta}
+          onAceptar={aceptarOferta}
+          onRechazar={rechazarOferta}
+        />
+
+        <ParadaSugeridaCard
+  paradaSugerida={paradaSugerida}
+  onConfirmar={confirmarParada}
+  onRechazar={rechazarParada}
+/>
+
+        {servicioActivo && (
+          <section className="tarjeta-servicio">
+            <h2>En servicio</h2>
+            <p>
+              <strong>Cliente:</strong> {servicioActivo.nombreCliente}
+            </p>
+            <p>
+              <strong>Teléfono:</strong> {servicioActivo.telefonoCliente}
+            </p>
+            <p>
+              <strong>Recogida:</strong> {servicioActivo.direccionRecogida}
+            </p>
+
+            <button className="activo" onClick={terminarServicio}>
+              Terminado
+            </button>
+          </section>
+        )}
+
+        <audio ref={audioRef} src="/notificacion.mp3" preload="auto" />
+      </section>
+    </main>
   );
 }

@@ -243,6 +243,7 @@ function registerIncomingCallRoute(app, llamadas) {
         const speech = (body.SpeechResult || "").trim().toLowerCase();
 
         console.log(">>> POST /incoming-call/confirmar-direccion");
+        console.log("BODY confirmar-direccion:", body);
         console.log("SpeechResult:", speech);
         console.log("CallSid:", callSid);
 
@@ -343,10 +344,7 @@ function registerIncomingCallRoute(app, llamadas) {
                     console.log("💾 Llamada guardada por solicitud:", resultado.referencia);
                 }
             } catch (error) {
-                console.error(
-                    "❌ Error creando solicitud tras confirmar dirección:",
-                    error.message
-                );
+                console.error("❌ Error creando solicitud tras confirmar dirección:", error.message);
                 llamada.estado = "error";
                 llamadas.set(callSid, llamada);
             }
