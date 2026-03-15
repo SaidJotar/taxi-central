@@ -6,4 +6,4 @@ coverage
 .prisma
 apps/app-taxista/node_modules
 apps/app-taxista/dist
-src/scripts/*
+src/scripts/
