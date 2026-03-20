@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function ParadaSugeridaCard({
   paradaSugerida,
-  onConfirmar,
-  onRechazar,
+  onCancelar,
 }) {
   const [segundosRestantes, setSegundosRestantes] = useState(0);
+  const timeoutDisparadoRef = useRef(false);
 
   const expiresAtMs = useMemo(() => {
     if (!paradaSugerida?.expiresAt) return null;
     return new Date(paradaSugerida.expiresAt).getTime();
-  }, [paradaSugerida]);
+  }, [paradaSugerida?.expiresAt]);
 
   useEffect(() => {
-    if (!paradaSugerida || !expiresAtMs) {
+    timeoutDisparadoRef.current = false;
+
+    if (!paradaSugerida?.parada || !expiresAtMs) {
       setSegundosRestantes(0);
       return;
     }
@@ -23,8 +25,9 @@ export default function ParadaSugeridaCard({
       const segundos = Math.max(0, Math.ceil(diff / 1000));
       setSegundosRestantes(segundos);
 
-      if (diff <= 0) {
-        onRechazar(paradaSugerida.parada.id, "timeout");
+      if (diff <= 0 && !timeoutDisparadoRef.current) {
+        timeoutDisparadoRef.current = true;
+        onCancelar(paradaSugerida.parada.id, "timeout");
       }
     };
 
@@ -32,8 +35,10 @@ export default function ParadaSugeridaCard({
 
     const interval = setInterval(actualizar, 250);
 
-    return () => clearInterval(interval);
-  }, [paradaSugerida, expiresAtMs, onRechazar]);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [paradaSugerida, expiresAtMs, onCancelar]);
 
   if (!paradaSugerida?.parada) return null;
 
@@ -43,11 +48,18 @@ export default function ParadaSugeridaCard({
     <section className="oferta-card">
       <div className="oferta-badge">Parada cercana</div>
 
-      <h2 className="oferta-title">¿Has llegado a esta parada?</h2>
+      <p>
+        <span>Tiempo restante</span>
+        <strong className={segundosRestantes <= 5 ? "oferta-tiempo-urgente" : ""}>
+          : {segundosRestantes}s
+        </strong>
+      </p>
+
+      <h2 className="oferta-title">Entrando automáticamente en parada...</h2>
 
       <div className="oferta-info">
         <p>
-          <span>Parada</span>
+          <span>Nombre</span>
           <strong>{parada.nombre}</strong>
         </p>
 
@@ -58,32 +70,23 @@ export default function ParadaSugeridaCard({
           </p>
         )}
 
-        <p>
-          <span>Distancia</span>
-          <strong>{parada.distanciaMetros} m</strong>
-        </p>
-
-        <p>
-          <span>Tiempo restante</span>
-          <strong className={segundosRestantes <= 5 ? "oferta-tiempo-urgente" : ""}>
-            {segundosRestantes}s
-          </strong>
-        </p>
+        {typeof parada.distanciaMetros === "number" && (
+          <p>
+            <span>Distancia</span>
+            <strong>{parada.distanciaMetros} m</strong>
+          </p>
+        )}
       </div>
 
       <div className="oferta-actions">
         <button
-          className="btn-aceptar"
-          onClick={() => onConfirmar(parada.id)}
-        >
-          Entrar en parada
-        </button>
-
-        <button
           className="btn-rechazar"
-          onClick={() => onRechazar(parada.id, "rechazada")}
+          onClick={() => {
+            timeoutDisparadoRef.current = true;
+            onCancelar(parada.id, "rechazada");
+          }}
         >
-          No
+          Cancelar autoentrada
         </button>
       </div>
     </section>

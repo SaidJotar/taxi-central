@@ -28,9 +28,20 @@ export default function TarjetaOferta({ oferta, onAceptar, onRechazar }) {
 
   if (!oferta) return null;
 
+  const solicitud = oferta?.solicitud || {};
+
+  const nombreCliente = solicitud?.nombreCliente || "No disponible";
+  const telefonoCliente = solicitud?.telefonoCliente || "No disponible";
+  const recogida =
+    solicitud?.direccionBase ||
+    solicitud?.direccionRecogida ||
+    "No disponible";
+  const referencia = solicitud?.referenciaRecogida || null;
+
   return (
     <section className="oferta-card">
       <div className="oferta-badge">Nueva oferta</div>
+
       <p>
         <span>Tiempo restante</span>
         <strong className={segundosRestantes <= 3 ? "oferta-tiempo-urgente" : ""}>
@@ -43,20 +54,25 @@ export default function TarjetaOferta({ oferta, onAceptar, onRechazar }) {
       <div className="oferta-info">
         <p>
           <span>Cliente</span>
-          <strong>{oferta.solicitud.nombreCliente}</strong>
+          <strong>{nombreCliente}</strong>
         </p>
 
         <p>
           <span>Teléfono</span>
-          <strong>{oferta.solicitud.telefonoCliente}</strong>
+          <strong>{telefonoCliente}</strong>
         </p>
 
         <p>
           <span>Recogida</span>
-          <strong>{oferta.solicitud.direccionRecogida}</strong>
+          <strong>{recogida}</strong>
         </p>
 
-
+        {referencia && (
+          <p>
+            <span>Referencia</span>
+            <strong>{referencia}</strong>
+          </p>
+        )}
       </div>
 
       <div className="oferta-actions">

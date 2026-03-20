@@ -49,6 +49,8 @@ model SolicitudViaje {
   nombreCliente     String
   telefonoCliente   String
   direccionRecogida String
+  direccionBase        String?
+  referenciaRecogida   String?
   estado            EstadoSolicitud
   origen            OrigenSolicitud?
   creadaEn          DateTime         @default(now())

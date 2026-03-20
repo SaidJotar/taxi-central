@@ -3,6 +3,35 @@ const { obtenerLlamadaPorSolicitud } = require("../llamadasActivas");
 const { distanciaMetros } = require("./geoUtils");
 
 const OFERTA_TIMEOUT_MS = 10000;
+const GPS_RECIENTE_MS = 120000;
+
+function fechaGpsMinima() {
+  return new Date(Date.now() - GPS_RECIENTE_MS);
+}
+
+async function buscarCualquierTaxiDisponible(taxistasExcluidos = []) {
+  const taxistas = await prisma.taxista.findMany({
+    where: {
+      estado: "disponible",
+      id: {
+        notIn: taxistasExcluidos,
+      },
+      vehiculo: {
+        isNot: null,
+      },
+    },
+    include: {
+      vehiculo: true,
+    },
+    orderBy: {
+      creadoEn: "asc",
+    },
+  });
+
+  if (!taxistas.length) return null;
+
+  return taxistas[0];
+}
 
 async function buscarTaxiEnParada(paradaId, taxistasExcluidos = []) {
   if (!paradaId) return null;
@@ -47,6 +76,10 @@ async function buscarTaxiMasCercano(lat, lng, taxistasExcluidos = []) {
       vehiculo: {
         isNot: null,
       },
+      ubicacionActualizadaEn: {
+        gte: fechaGpsMinima(),
+      },
+      paradaId: null,
     },
     include: {
       vehiculo: true,
@@ -78,7 +111,6 @@ async function buscarSiguienteTaxistaDisponible(solicitudViajeId, taxistasExclui
 
   if (!solicitud) return null;
 
-  // 1. Primero taxis de la parada sugerida
   if (solicitud.paradaSugeridaId) {
     const taxiParada = await buscarTaxiEnParada(
       solicitud.paradaSugeridaId,
@@ -90,7 +122,6 @@ async function buscarSiguienteTaxistaDisponible(solicitudViajeId, taxistasExclui
     }
   }
 
-  // 2. Si no hay taxis en parada, buscar el más cercano
   if (
     typeof solicitud.latRecogida === "number" &&
     typeof solicitud.lngRecogida === "number"
@@ -143,12 +174,22 @@ async function intentarOfertarSolicitudPendienteATaxista(taxistaId) {
       solicitudViajeId: solicitud.id,
       taxistaId: taxista.id,
       estado: {
-        in: ["pendiente", "aceptada"],
+        in: ["pendiente", "aceptada", "rechazada", "expirada"],
       },
     },
   });
 
   if (ofertaExistente) {
+    return null;
+  }
+
+  const taxistaElegido = await buscarSiguienteTaxistaDisponible(solicitud.id);
+
+  if (!taxistaElegido) {
+    return null;
+  }
+
+  if (taxistaElegido.id !== taxista.id) {
     return null;
   }
 
@@ -176,17 +217,18 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
   const io = obtenerIo();
 
   const expiresAt = new Date(Date.now() + OFERTA_TIMEOUT_MS).toISOString();
-
-  io.to(`taxista:${taxista.id}`).emit("oferta:recibida", {
-    ofertaId: oferta.id,
-    expiresAt,
-    solicitud: {
-      id: solicitud.id,
-      nombreCliente: solicitud.nombreCliente,
-      telefonoCliente: solicitud.telefonoCliente,
-      direccionRecogida: solicitud.direccionRecogida,
-    },
-  });
+io.to(`taxista:${taxista.id}`).emit("oferta:recibida", {
+  ofertaId: oferta.id,
+  expiresAt,
+  solicitud: {
+    id: solicitud.id,
+    nombreCliente: solicitud.nombreCliente,
+    telefonoCliente: solicitud.telefonoCliente,
+    direccionRecogida: solicitud.direccionRecogida,
+    direccionBase: solicitud.direccionBase || null,
+    referenciaRecogida: solicitud.referenciaRecogida || null,
+  },
+});
 
   programarTimeoutOferta(oferta.id);
 
@@ -194,6 +236,8 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
 }
 
 async function programarSiguienteOferta(solicitudViajeId) {
+  console.log("🔁 programarSiguienteOferta", { solicitudViajeId });
+
   const solicitud = await prisma.solicitudViaje.findUnique({
     where: { id: solicitudViajeId },
     include: {
@@ -208,15 +252,22 @@ async function programarSiguienteOferta(solicitudViajeId) {
     solicitud.estado === "cancelada" ||
     solicitud.estado === "completada"
   ) {
+    console.log("⛔ No se relanza oferta: solicitud cerrada", {
+      solicitudViajeId,
+      estado: solicitud.estado,
+    });
     return;
   }
 
   const taxistasProbados = solicitud.ofertas.map((o) => o.taxistaId);
+  console.log("🧪 taxistas probados:", taxistasProbados);
 
   const siguienteTaxista = await buscarSiguienteTaxistaDisponible(
     solicitudViajeId,
     taxistasProbados
   );
+
+  console.log("🚕 siguiente taxista:", siguienteTaxista?.id || null);
 
   if (!siguienteTaxista) {
     await prisma.solicitudViaje.update({
@@ -224,8 +275,6 @@ async function programarSiguienteOferta(solicitudViajeId) {
       data: { estado: "sin_taxista" },
     });
 
-    // En Twilio-only no cerramos la llamada aquí.
-    // Solo marcamos el estado para que /incoming-call/espera hable al cliente.
     const llamadaActiva = obtenerLlamadaPorSolicitud(solicitudViajeId);
 
     if (llamadaActiva) {
@@ -260,6 +309,7 @@ function programarTimeoutOferta(ofertaId) {
 
       if (!oferta) return;
       if (oferta.estado !== "pendiente") return;
+      if (oferta.solicitudViaje?.estado === "cancelada") return;
 
       await prisma.ofertaSolicitud.update({
         where: { id: ofertaId },

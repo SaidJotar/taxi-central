@@ -9,6 +9,8 @@ const prisma = require("./services/bd");
 const { iniciarSocket } = require("./socketSoloTwilio");
 const { obtenerIo } = require("./socketSoloTwilio");
 const authRoutes = require("./routes/auth");
+const { geocodificarDireccion } = require("./services/geocodingService");
+const { buscarParadaMasCercana } = require("./services/paradasService");
 
 const app = express();
 
@@ -56,19 +58,50 @@ app.get("/taxistas", async (req, res) => {
 
 const { buscarSiguienteTaxistaDisponible, emitirOfertaATaxista } = require("./services/ofertasServiceSoloTwilio");
 
+app.all("/debug-status", (req, res) => {
+  console.log("🔥🔥🔥 ENTRÓ /debug-status");
+  console.log("BODY:", req.body);
+  console.log("QUERY:", req.query);
+  res.status(200).send("debug-status-ok");
+});
+
 app.post("/test/oferta-real", async (req, res) => {
   try {
     const {
       nombreCliente = "Cliente Test",
       telefonoCliente = "+34600000000",
       direccionRecogida = "Gran Vía 25",
+      direccionBase = null,
+      referenciaRecogida = null,
     } = req.body || {};
+
+    const textoParaGeo = direccionBase || direccionRecogida;
+
+    let geo = null;
+    let paradaSugerida = null;
+
+    try {
+      if (textoParaGeo) {
+        geo = await geocodificarDireccion(textoParaGeo);
+      }
+
+      if (geo?.lat != null && geo?.lng != null) {
+        paradaSugerida = await buscarParadaMasCercana(geo.lat, geo.lng);
+      }
+    } catch (e) {
+      console.error("❌ Error geocodificando test/oferta-real:", e.message);
+    }
 
     const solicitud = await prisma.solicitudViaje.create({
       data: {
         nombreCliente,
         telefonoCliente,
         direccionRecogida,
+        direccionBase,
+        referenciaRecogida,
+        latRecogida: geo?.lat ?? null,
+        lngRecogida: geo?.lng ?? null,
+        paradaSugeridaId: paradaSugerida?.id ?? null,
         estado: "pendiente",
         confirmadaEn: new Date(),
       },

@@ -265,3 +265,46 @@
 .oferta-tiempo-urgente {
   color: red;
 }
+
+.info-operativa {
+  margin-top: 12px;
+}
+
+.info-pill {
+  margin: 8px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.info-parada {
+  background: #eef6ff;
+  color: #1d4ed8;
+}
+
+.info-disponible {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.info-ocupado {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.info-desconectado {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.info-servicio {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.info-extra {
+  margin-top: 6px;
+  font-size: 0.88rem;
+  color: #6b7280;
+}
