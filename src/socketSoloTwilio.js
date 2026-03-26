@@ -19,7 +19,7 @@ const autoEntradaParadaTimers = new Map();
 
 const RADIO_ENTRADA_PARADA_METROS = 40;
 const RADIO_SALIDA_PARADA_METROS = 80;
-const TIEMPO_CONFIRMACION_PARADA_MS = 20000;
+const TIEMPO_CONFIRMACION_PARADA_MS = 10000;
 const COOLDOWN_RECHAZO_PARADA_MS = 60000;
 const GPS_CADUCADO_MS = 60000;
 
@@ -42,12 +42,37 @@ function limpiarSugerenciaParada(taxistaId) {
   }
 }
 
+function limpiarTimerAutoEntrada(taxistaId) {
+  const timer = autoEntradaParadaTimers.get(taxistaId);
+  if (timer) {
+    clearTimeout(timer);
+    autoEntradaParadaTimers.delete(taxistaId);
+  }
+}
+
+function limpiarSugerenciaParada(taxistaId) {
+  sugerenciasParada.delete(taxistaId);
+  limpiarTimerAutoEntrada(taxistaId);
+}
+
+function cancelarSugerenciaParada(socket, taxistaId, motivo = "salio_del_radio") {
+  const sugerencia = sugerenciasParada.get(taxistaId);
+
+  if (!sugerencia) return;
+
+  limpiarSugerenciaParada(taxistaId);
+
+  socket.emit("taxista:parada_sugerida_cancelada", {
+    ok: true,
+    paradaId: sugerencia.paradaId,
+    motivo,
+  });
+}
+
 async function emitirColaParadaActualizada(paradaId) {
   if (!io || !paradaId) return;
 
   const cola = await obtenerColaParada(paradaId);
-
-  console.log("🚖 Cola actualizada parada", paradaId, cola);
 
   io.emit("parada:cola_actualizada", {
     paradaId,
@@ -101,16 +126,6 @@ async function desconectarTaxistasSinGps() {
       ok: false,
       message: "GPS inactivo. Has sido pasado a desconectado.",
     });
-
-    io.to(`taxista:${taxistaId}`).emit("oferta:cancelada", {
-      ofertaId,
-      solicitudViajeId,
-      motivo: "cliente_colgo",
-    });
-
-    console.log(
-      `📴 Taxista ${taxista.id} pasado a desconectado por GPS caducado`
-    );
   }
 }
 
@@ -138,7 +153,6 @@ function iniciarSocket(server) {
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token;
-      console.log("token recibido en socket:", !!token);
 
       if (!token) {
         return next(new Error("Token no proporcionado"));
@@ -163,8 +177,6 @@ function iniciarSocket(server) {
   });
 
   io.on("connection", async (socket) => {
-    console.log("🟢 Taxista conectado por socket:", socket.id);
-
     try {
       const taxistaId = socket.taxistaAuth?.taxistaId;
 
@@ -174,7 +186,6 @@ function iniciarSocket(server) {
       }
 
       socket.join(`taxista:${taxistaId}`);
-      console.log(`✅ Taxista ${taxistaId} unido a sala taxista:${taxistaId}`);
 
       const taxista = await prisma.taxista.findUnique({
         where: { id: taxistaId },
@@ -241,8 +252,6 @@ function iniciarSocket(server) {
           return;
         }
 
-        console.log("taxistaId del token:", taxistaId);
-
         if (estado === "disponible") {
           const actual = await prisma.taxista.findUnique({
             where: { id: taxistaId },
@@ -292,18 +301,11 @@ function iniciarSocket(server) {
           taxista,
         });
 
-        console.log(`🔄 Estado taxista ${taxistaId} -> ${estado}`);
-
         if (estado === "disponible") {
           const oferta = await intentarOfertarSolicitudPendienteATaxista(
             taxistaId
           );
 
-          if (oferta) {
-            console.log(
-              `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId}`
-            );
-          }
         }
       } catch (error) {
         console.error("Error taxista:cambiar_estado:", error.message);
@@ -349,10 +351,15 @@ function iniciarSocket(server) {
           },
         });
 
+        // Si está desconectado, no gestionar paradas
         if (taxista.estado === "desconectado") {
+          cancelarSugerenciaParada(socket, taxistaId, "desconectado");
           return;
         }
 
+        // --------------------------------------------------
+        // YA ESTÁ EN PARADA -> comprobar salida automática
+        // --------------------------------------------------
         if (taxista.paradaId && taxista.parada) {
           const distanciaSalida = distanciaMetros(
             lat,
@@ -387,28 +394,24 @@ function iniciarSocket(server) {
               taxista: taxistaActualizado,
             });
 
-            console.log(
-              `🚕 Taxista ${taxistaId} salió automáticamente de parada`
-            );
             await emitirColaParadaActualizada(taxista.paradaId);
 
             const oferta = await intentarOfertarSolicitudPendienteATaxista(
               taxistaId
             );
 
-            if (oferta) {
-              console.log(
-                `📨 Oferta pendiente lanzada al taxista ${taxistaId} tras salir de parada`
-              );
-            }
           }
 
           return;
         }
 
+        // --------------------------------------------------
+        // NO ESTÁ EN PARADA -> comprobar posible entrada
+        // --------------------------------------------------
         const pendiente = sugerenciasParada.get(taxistaId);
         const ahora = Date.now();
 
+        // Si está en cooldown por rechazo, no volver a sugerir
         if (pendiente?.ignoradasHasta && ahora < pendiente.ignoradasHasta) {
           return;
         }
@@ -422,12 +425,12 @@ function iniciarSocket(server) {
         // Si ya no hay parada cercana, cancelar la sugerencia actual
         if (!paradaCercana) {
           if (pendiente) {
-            limpiarSugerenciaParada(taxistaId);
+            cancelarSugerenciaParada(socket, taxistaId, "salio_del_radio");
           }
           return;
         }
 
-        // Si ya hay una sugerencia activa para ESTA MISMA parada, no la regeneres
+        // Si ya existe sugerencia activa para esta misma parada, no regenerarla
         if (
           pendiente &&
           pendiente.paradaId === paradaCercana.id &&
@@ -436,9 +439,9 @@ function iniciarSocket(server) {
           return;
         }
 
-        // Si había una sugerencia para otra parada, limpiarla antes de crear la nueva
+        // Si había sugerencia anterior para otra parada, cancelarla primero
         if (pendiente && pendiente.paradaId !== paradaCercana.id) {
-          limpiarSugerenciaParada(taxistaId);
+          cancelarSugerenciaParada(socket, taxistaId, "cambio_de_parada");
         }
 
         const expiraEn = ahora + TIEMPO_CONFIRMACION_PARADA_MS;
@@ -460,6 +463,7 @@ function iniciarSocket(server) {
           expiresAt: new Date(expiraEn).toISOString(),
         });
 
+        // Crear timer automático solo si no existe ya
         if (!autoEntradaParadaTimers.has(taxistaId)) {
           const paradaDetectadaId = paradaCercana.id;
 
@@ -507,21 +511,12 @@ function iniciarSocket(server) {
                 taxista: taxistaActualizado,
               });
 
-              console.log(
-                `✅ Taxista ${taxistaId} entró automáticamente en parada ${paradaDetectadaId}`
-              );
-
               await emitirColaParadaActualizada(paradaDetectadaId);
 
               const oferta = await intentarOfertarSolicitudPendienteATaxista(
                 taxistaId
               );
 
-              if (oferta) {
-                console.log(
-                  `📨 Oferta pendiente lanzada al taxista ${taxistaId} al entrar automáticamente en parada`
-                );
-              }
             } catch (error) {
               console.error("Error autoentrada parada:", error.message);
             } finally {
@@ -532,9 +527,6 @@ function iniciarSocket(server) {
           autoEntradaParadaTimers.set(taxistaId, timer);
         }
 
-        console.log(
-          `🚖 Sugerida parada ${paradaCercana.nombre} a taxista ${taxistaId}`
-        );
       } catch (error) {
         console.error("Error taxista:ubicacion:", error.message);
       }
@@ -544,8 +536,6 @@ function iniciarSocket(server) {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
 
-        console.log("➡️ taxista:confirmar_parada", { taxistaId, paradaId });
-
         if (!taxistaId || !paradaId) {
           socket.emit("error:general", {
             message: "Faltan datos para confirmar parada",
@@ -554,7 +544,6 @@ function iniciarSocket(server) {
         }
 
         const sugerencia = sugerenciasParada.get(taxistaId);
-        console.log("🧠 sugerencia actual:", sugerencia);
 
         if (!sugerencia || sugerencia.paradaId !== paradaId) {
           socket.emit("error:general", {
@@ -587,19 +576,10 @@ function iniciarSocket(server) {
           },
         });
 
-        console.log("✅ Taxista actualizado al entrar en parada:", {
-          id: taxista.id,
-          paradaId: taxista.paradaId,
-          enParadaDesde: taxista.enParadaDesde,
-          parada: taxista.parada?.nombre,
-        });
-
         socket.emit("taxista:parada_confirmada", {
           ok: true,
           taxista,
         });
-
-        console.log(`✅ Taxista ${taxistaId} confirmado en parada ${paradaId}`);
 
         await emitirColaParadaActualizada(paradaId);
 
@@ -607,11 +587,6 @@ function iniciarSocket(server) {
           taxistaId
         );
 
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al entrar en parada`
-          );
-        }
       } catch (error) {
         console.error("Error taxista:confirmar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -622,12 +597,6 @@ function iniciarSocket(server) {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
 
-        console.log("➡️ taxista:rechazar_parada", {
-          taxistaId,
-          paradaId,
-          motivo,
-        });
-
         if (!taxistaId || !paradaId) {
           socket.emit("error:general", {
             message: "Faltan datos para rechazar parada",
@@ -636,7 +605,6 @@ function iniciarSocket(server) {
         }
 
         const sugerencia = sugerenciasParada.get(taxistaId);
-        console.log("🧠 sugerencia antes de rechazar:", sugerencia);
 
         if (!sugerencia || sugerencia.paradaId !== paradaId) {
           return;
@@ -656,10 +624,6 @@ function iniciarSocket(server) {
           motivo: motivo || "rechazada",
         });
 
-        console.log(
-          `❌ Taxista ${taxistaId} rechazó sugerencia de parada ${paradaId}. Motivo: ${motivo || "rechazada"
-          }`
-        );
       } catch (error) {
         console.error("Error taxista:rechazar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -697,19 +661,12 @@ function iniciarSocket(server) {
           taxista,
         });
 
-        console.log(`🚖 Taxista ${taxistaId} llegó a parada ${paradaId}`);
-
         await emitirColaParadaActualizada(paradaId);
 
         const oferta = await intentarOfertarSolicitudPendienteATaxista(
           taxistaId
         );
 
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} al llegar a parada`
-          );
-        }
       } catch (error) {
         console.error("Error taxista:llegar_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -754,8 +711,6 @@ function iniciarSocket(server) {
           taxista,
         });
 
-        console.log(`🚕 Taxista ${taxistaId} salió manualmente de parada`);
-
         if (paradaAnteriorId) {
           await emitirColaParadaActualizada(paradaAnteriorId);
         }
@@ -764,11 +719,6 @@ function iniciarSocket(server) {
           taxistaId
         );
 
-        if (oferta) {
-          console.log(
-            `📨 Oferta pendiente lanzada al taxista ${taxistaId} tras salir manualmente de parada`
-          );
-        }
       } catch (error) {
         console.error("Error taxista:salir_parada:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -907,8 +857,6 @@ function iniciarSocket(server) {
           },
         });
 
-        console.log(`✅ Oferta ${ofertaId} aceptada por taxista ${taxistaId}`);
-
         if (paradaAnteriorId) {
           await emitirColaParadaActualizada(paradaAnteriorId);
         }
@@ -965,8 +913,6 @@ function iniciarSocket(server) {
           ofertaId,
         });
 
-        console.log(`❌ Oferta ${ofertaId} rechazada`);
-
         await programarSiguienteOferta(oferta.solicitudViajeId);
       } catch (error) {
         console.error("Error oferta:rechazar:", error.message);
@@ -977,8 +923,6 @@ function iniciarSocket(server) {
     socket.on("servicio:terminar", async ({ solicitudId }) => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
-
-        console.log("➡️ servicio:terminar recibido", { solicitudId, taxistaId });
 
         if (!solicitudId || !taxistaId) {
           socket.emit("error:general", {
@@ -994,8 +938,6 @@ function iniciarSocket(server) {
           },
         });
 
-        console.log("📦 solicitud encontrada:", solicitud);
-
         if (!solicitud) {
           socket.emit("error:general", {
             message: "Solicitud no encontrada",
@@ -1004,11 +946,6 @@ function iniciarSocket(server) {
         }
 
         if (!solicitud.asignacion || solicitud.asignacion.taxistaId !== taxistaId) {
-          console.log("❌ No autorizado para terminar", {
-            asignacion: solicitud.asignacion,
-            taxistaToken: taxistaId,
-          });
-
           socket.emit("error:general", {
             message: "No autorizado para terminar este servicio",
           });
@@ -1043,27 +980,24 @@ function iniciarSocket(server) {
           taxista: taxistaActualizado,
         });
 
-        console.log(`✅ Servicio ${solicitudId} terminado por taxista ${taxistaId}`);
-
         const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
 
-        if (oferta) {
-          console.log(
-            `📨 Se ha lanzado una oferta pendiente al taxista ${taxistaId} tras terminar servicio`
-          );
-        }
       } catch (error) {
         console.error("Error servicio:terminar:", error.message);
         socket.emit("error:general", { message: error.message });
       }
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async (reason) => {
       const taxistaId = socket.taxistaAuth?.taxistaId;
-      if (taxistaId) {
-        limpiarTimerAutoEntrada(taxistaId);
+
+      try {
+        if (taxistaId) {
+          limpiarTimerAutoEntrada(taxistaId);
+        }
+      } catch (error) {
+        console.error("Error en disconnect:", error.message);
       }
-      console.log("🔴 Socket desconectado:", socket.id);
     });
   });
 

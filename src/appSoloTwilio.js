@@ -11,19 +11,32 @@ const { obtenerIo } = require("./socketSoloTwilio");
 const authRoutes = require("./routes/auth");
 const { geocodificarDireccion } = require("./services/geocodingService");
 const { buscarParadaMasCercana } = require("./services/paradasService");
+const mobileRoutes = require("./routes/mobile");
 
 const app = express();
 
 app.set("trust proxy", 1);
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:8081",
+  "http://127.0.0.1:8081",
+  "https://sjaceuta.es",
+  "https://www.sjaceuta.es",
+  "https://api.sjaceuta.es",
+  "https://taxista.sjaceuta.es",
+];
+
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://sjaceuta.es",
-    "https://www.sjaceuta.es",
-    "https://api.sjaceuta.es",
-    "https://taxista.sjaceuta.es"
-  ],
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS no permitido para origin: ${origin}`));
+  },
   credentials: true,
 }));
 
@@ -31,6 +44,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.use("/auth", authRoutes);
+app.use("/mobile", mobileRoutes);
 
 const server = http.createServer(app);
 const llamadas = new Map();

@@ -204,6 +204,43 @@ async function intentarOfertarSolicitudPendienteATaxista(taxistaId) {
   });
 }
 
+async function enviarPushOferta(expoPushToken, solicitud) {
+  if (!expoPushToken) {
+    console.log("No hay expoPushToken guardado");
+    return;
+  }
+
+  const mensaje = {
+    to: expoPushToken,
+    sound: "default",
+    title: "Nueva oferta",
+    body:
+      solicitud.direccionBase ||
+      solicitud.direccionRecogida ||
+      "Tienes una nueva oferta",
+    data: {
+      type: "oferta",
+      solicitudId: solicitud.id,
+    },
+  };
+
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(mensaje),
+    });
+
+    const result = await response.text();
+    console.log("Resultado Expo push:", result);
+  } catch (error) {
+    console.error("Error enviando push:", error.message);
+  }
+}
+
 async function emitirOfertaATaxista({ solicitud, taxista }) {
   const oferta = await prisma.ofertaSolicitud.create({
     data: {
@@ -217,18 +254,20 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
   const io = obtenerIo();
 
   const expiresAt = new Date(Date.now() + OFERTA_TIMEOUT_MS).toISOString();
-io.to(`taxista:${taxista.id}`).emit("oferta:recibida", {
-  ofertaId: oferta.id,
-  expiresAt,
-  solicitud: {
-    id: solicitud.id,
-    nombreCliente: solicitud.nombreCliente,
-    telefonoCliente: solicitud.telefonoCliente,
-    direccionRecogida: solicitud.direccionRecogida,
-    direccionBase: solicitud.direccionBase || null,
-    referenciaRecogida: solicitud.referenciaRecogida || null,
-  },
-});
+  io.to(`taxista:${taxista.id}`).emit("oferta:recibida", {
+    ofertaId: oferta.id,
+    expiresAt,
+    solicitud: {
+      id: solicitud.id,
+      nombreCliente: solicitud.nombreCliente,
+      telefonoCliente: solicitud.telefonoCliente,
+      direccionRecogida: solicitud.direccionRecogida,
+      direccionBase: solicitud.direccionBase || null,
+      referenciaRecogida: solicitud.referenciaRecogida || null,
+    },
+  });
+
+  enviarPushOferta(taxista.expoPushToken, solicitud);
 
   programarTimeoutOferta(oferta.id);
 

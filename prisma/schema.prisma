@@ -30,6 +30,9 @@ model Taxista {
   vehiculo     Vehiculo?
   asignaciones AsignacionSolicitud[]
   ofertas      OfertaSolicitud[]
+
+  expoPushToken         String?
+  objetosPerdidos ObjetoPerdido[]
 }
 
 model Vehiculo {
@@ -99,6 +102,23 @@ model Parada {
 
   taxistas             Taxista[]        @relation("TaxistasEnParada")
   solicitudesSugeridas SolicitudViaje[] @relation("ParadaSugeridaSolicitud")
+}
+
+model ObjetoPerdido {
+  id             String   @id @default(uuid())
+  descripcion    String
+  observaciones  String?
+  estado         EstadoObjetoPerdido @default(pendiente)
+  fechaHallazgo  DateTime @default(now())
+  creadoEn       DateTime @default(now())
+
+  taxistaId      String
+  taxista        Taxista  @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+}
+
+enum EstadoObjetoPerdido {
+  pendiente
+  entregado
 }
 
 enum EstadoTaxista {
