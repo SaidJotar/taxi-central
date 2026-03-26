@@ -75,7 +75,7 @@ router.get("/oferta-pendiente", authTaxista, async (req, res) => {
                 estado: "pendiente",
             },
             orderBy: {
-                creadaEn: "desc",
+                ofrecidaEn: "desc",
             },
             include: {
                 solicitudViaje: true,
