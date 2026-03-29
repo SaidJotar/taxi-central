@@ -266,6 +266,11 @@ function iniciarSocket(server) {
             Date.now() - new Date(actual.ubicacionActualizadaEn).getTime() <=
             GPS_CADUCADO_MS;
 
+          console.log("🧪 taxista:cambiar_estado disponible");
+          console.log("taxistaId:", taxistaId);
+          console.log("ubicacionActualizadaEn:", actual?.ubicacionActualizadaEn);
+          console.log("gpsReciente:", gpsReciente);
+
           if (!gpsReciente) {
             socket.emit("taxista:gps_requerido", {
               ok: false,
