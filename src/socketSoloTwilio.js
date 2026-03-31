@@ -101,6 +101,12 @@ async function desconectarTaxistasSinGps() {
   });
 
   for (const taxista of taxistas) {
+    console.log("🧪 taxista sin GPS reciente", {
+      taxistaId: taxista.id,
+      estado: taxista.estado,
+      ubicacionActualizadaEn: taxista.ubicacionActualizadaEn,
+      ahora: new Date().toISOString(),
+    });
     const actualizado = await prisma.taxista.update({
       where: { id: taxista.id },
       data: {
@@ -342,6 +348,13 @@ function iniciarSocket(server) {
           });
           return;
         }
+
+        console.log("📍 backend recibe ubicación", {
+          taxistaId,
+          lat,
+          lng,
+          at: new Date().toISOString(),
+        });
 
         const taxista = await prisma.taxista.update({
           where: { id: taxistaId },
