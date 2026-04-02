@@ -401,31 +401,13 @@ router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
 
 router.get("/public/objetos-perdidos", async (req, res) => {
   try {
-    const q = (req.query.q || "").toString().trim();
+    const q = (req.query.q || "").toString().trim().toLowerCase();
 
     const objetos = await prisma.objetoPerdido.findMany({
       where: {
         estado: {
           not: "entregado",
         },
-        ...(q
-          ? {
-            OR: [
-              { descripcion: { contains: q } },
-              { observaciones: { contains: q } },
-              { estado: { contains: q } },
-              {
-                taxista: {
-                  vehiculo: {
-                    numeroTaxi: {
-                      contains: q,
-                    },
-                  },
-                },
-              },
-            ],
-          }
-          : {}),
       },
       orderBy: {
         creadoEn: "desc",
@@ -439,7 +421,7 @@ router.get("/public/objetos-perdidos", async (req, res) => {
       },
     });
 
-    const resultado = objetos.map((item) => ({
+    let resultado = objetos.map((item) => ({
       id: item.id,
       descripcion: item.descripcion,
       observaciones: item.observaciones || null,
@@ -447,6 +429,23 @@ router.get("/public/objetos-perdidos", async (req, res) => {
       numeroTaxi: item.taxista?.vehiculo?.numeroTaxi || null,
       estado: item.estado,
     }));
+
+    if (q) {
+      resultado = resultado.filter((item) => {
+        const texto = [
+          item.descripcion,
+          item.observaciones,
+          item.numeroTaxi?.toString(),
+          item.estado?.toString(),
+          formatearTextoFecha(item.fecha),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return texto.includes(q);
+      });
+    }
 
     return res.json(resultado);
   } catch (error) {
@@ -457,5 +456,14 @@ router.get("/public/objetos-perdidos", async (req, res) => {
     });
   }
 });
+
+function formatearTextoFecha(fecha) {
+  if (!fecha) return "";
+
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return "";
+
+  return d.toLocaleDateString("es-ES");
+}
 
 module.exports = router;
