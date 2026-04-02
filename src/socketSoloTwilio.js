@@ -144,6 +144,7 @@ function iniciarSocket(server) {
         "https://sjaceuta.es",
         "https://www.sjaceuta.es",
         "https://api.sjaceuta.es",
+        "https://objetos.sjaceuta.es",
       ],
       methods: ["GET", "POST"],
       credentials: true,

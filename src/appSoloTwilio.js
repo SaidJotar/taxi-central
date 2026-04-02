@@ -25,6 +25,7 @@ const allowedOrigins = [
   "https://www.sjaceuta.es",
   "https://api.sjaceuta.es",
   "https://taxista.sjaceuta.es",
+  "https://objetos.sjaceuta.es",
 ];
 
 app.use(cors({
