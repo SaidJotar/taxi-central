@@ -5,109 +5,109 @@ const { verificarToken } = require("../services/authToken");
 const router = express.Router();
 
 function authTaxista(req, res, next) {
-    try {
-        const auth = req.headers.authorization || "";
-        const token = auth.replace("Bearer ", "").trim();
+  try {
+    const auth = req.headers.authorization || "";
+    const token = auth.replace("Bearer ", "").trim();
 
-        if (!token) {
-            return res.status(401).json({ error: "Token requerido" });
-        }
-
-        const payload = verificarToken(token);
-
-        if (!payload || payload.tipo !== "taxista") {
-            return res.status(401).json({ error: "Token inválido" });
-        }
-
-        req.taxistaAuth = {
-            taxistaId: payload.sub,
-            telefono: payload.telefono,
-        };
-
-        next();
-    } catch (error) {
-        return res.status(401).json({ error: "No autorizado" });
+    if (!token) {
+      return res.status(401).json({ error: "Token requerido" });
     }
+
+    const payload = verificarToken(token);
+
+    if (!payload || payload.tipo !== "taxista") {
+      return res.status(401).json({ error: "Token inválido" });
+    }
+
+    req.taxistaAuth = {
+      taxistaId: payload.sub,
+      telefono: payload.telefono,
+    };
+
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
 }
 
 router.post("/push-token", authTaxista, async (req, res) => {
-    try {
-        const { expoPushToken } = req.body || {};
-        const taxistaId = req.taxistaAuth.taxistaId;
+  try {
+    const { expoPushToken } = req.body || {};
+    const taxistaId = req.taxistaAuth.taxistaId;
 
-        console.log("📲 /mobile/push-token");
-        console.log("taxistaId:", taxistaId);
-        console.log("body:", req.body);
-        console.log("expoPushToken:", expoPushToken);
+    console.log("📲 /mobile/push-token");
+    console.log("taxistaId:", taxistaId);
+    console.log("body:", req.body);
+    console.log("expoPushToken:", expoPushToken);
 
-        if (!expoPushToken) {
-            return res.status(400).json({
-                ok: false,
-                error: "expoPushToken requerido",
-            });
-        }
-
-        const actualizado = await prisma.taxista.update({
-            where: { id: taxistaId },
-            data: { expoPushToken },
-        });
-
-        console.log("✅ taxista actualizado:", actualizado.id);
-
-        return res.json({ ok: true });
-    } catch (error) {
-        console.error("❌ Error /mobile/push-token completo:", error);
-        return res.status(500).json({
-            ok: false,
-            error: "No se pudo guardar el push token",
-            detalle: error.message,
-        });
+    if (!expoPushToken) {
+      return res.status(400).json({
+        ok: false,
+        error: "expoPushToken requerido",
+      });
     }
+
+    await prisma.taxista.update({
+      where: { id: taxistaId },
+      data: { expoPushToken },
+    });
+
+    console.log("✅ expoPushToken guardado para taxista:", taxistaId);
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("❌ Error /mobile/push-token completo:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo guardar el push token",
+      detalle: error.message,
+    });
+  }
 });
 
 router.get("/oferta-pendiente", authTaxista, async (req, res) => {
-    try {
-        const taxistaId = req.taxistaAuth.taxistaId;
+  try {
+    const taxistaId = req.taxistaAuth.taxistaId;
 
-        const oferta = await prisma.ofertaSolicitud.findFirst({
-            where: {
-                taxistaId,
-                estado: "pendiente",
-            },
-            orderBy: {
-                ofrecidaEn: "desc",
-            },
-            include: {
-                solicitudViaje: true,
-            },
-        });
+    const oferta = await prisma.ofertaSolicitud.findFirst({
+      where: {
+        taxistaId,
+        estado: "pendiente",
+      },
+      orderBy: {
+        ofrecidaEn: "desc",
+      },
+      include: {
+        solicitudViaje: true,
+      },
+    });
 
-        if (!oferta || !oferta.solicitudViaje) {
-            return res.json(null);
-        }
-
-        const expiresAt = new Date(
-            new Date(oferta.creadaEn).getTime() + 10000
-        ).toISOString();
-
-        return res.json({
-            ofertaId: oferta.id,
-            expiresAt,
-            solicitud: {
-                id: oferta.solicitudViaje.id,
-                nombreCliente: oferta.solicitudViaje.nombreCliente,
-                telefonoCliente: oferta.solicitudViaje.telefonoCliente,
-                direccionRecogida: oferta.solicitudViaje.direccionRecogida,
-                direccionBase: oferta.solicitudViaje.direccionBase || null,
-                referenciaRecogida: oferta.solicitudViaje.referenciaRecogida || null,
-            },
-        });
-    } catch (error) {
-        console.error("Error /mobile/oferta-pendiente:", error.message);
-        return res.status(500).json({
-            error: "No se pudo consultar la oferta pendiente",
-        });
+    if (!oferta || !oferta.solicitudViaje) {
+      return res.json(null);
     }
+
+    const expiresAt = new Date(
+      new Date(oferta.creadaEn).getTime() + 10000
+    ).toISOString();
+
+    return res.json({
+      ofertaId: oferta.id,
+      expiresAt,
+      solicitud: {
+        id: oferta.solicitudViaje.id,
+        nombreCliente: oferta.solicitudViaje.nombreCliente,
+        telefonoCliente: oferta.solicitudViaje.telefonoCliente,
+        direccionRecogida: oferta.solicitudViaje.direccionRecogida,
+        direccionBase: oferta.solicitudViaje.direccionBase || null,
+        referenciaRecogida: oferta.solicitudViaje.referenciaRecogida || null,
+      },
+    });
+  } catch (error) {
+    console.error("Error /mobile/oferta-pendiente:", error.message);
+    return res.status(500).json({
+      error: "No se pudo consultar la oferta pendiente",
+    });
+  }
 });
 
 router.get("/servicios", authTaxista, async (req, res) => {
@@ -162,58 +162,63 @@ router.get("/servicios", authTaxista, async (req, res) => {
 });
 
 router.get("/paradas-resumen", async (req, res) => {
-    try {
-        const paradas = await prisma.parada.findMany({
-            where: {
-                activa: true,
+  try {
+    const paradas = await prisma.parada.findMany({
+      where: {
+        activa: true,
+      },
+      orderBy: {
+        nombre: "asc",
+      },
+      include: {
+        taxistas: {
+          where: {
+            estado: "disponible",
+            enParadaDesde: {
+              not: null,
             },
-            orderBy: {
-                nombre: "asc",
-            },
-            include: {
-                taxistas: {
-                    where: {
-                        estado: "disponible",
-                        enParadaDesde: {
-                            not: null,
-                        },
-                    },
-                    include: {
-                        vehiculo: true,
-                    },
-                    orderBy: {
-                        enParadaDesde: "asc",
-                    },
-                },
-            },
-        });
+          },
+          include: {
+            vehiculo: true,
+          },
+          orderBy: {
+            enParadaDesde: "asc",
+          },
+        },
+      },
+    });
 
-        const resultado = paradas.map((parada) => ({
-            paradaId: parada.id,
-            nombre: parada.nombre,
-            direccion: parada.direccion,
-            totalTaxis: parada.taxistas.length,
-            cola: parada.taxistas.map((taxista, index) => ({
-                taxistaId: taxista.id,
-                nombreCompleto: taxista.nombreCompleto,
-                numeroTaxi: taxista.vehiculo?.numeroTaxi || null,
-                posicion: index + 1,
-                enParadaDesde: taxista.enParadaDesde,
-            })),
-        }));
+    const resultado = paradas.map((parada) => ({
+      paradaId: parada.id,
+      nombre: parada.nombre,
+      direccion: parada.direccion,
+      totalTaxis: parada.taxistas.length,
+      cola: parada.taxistas.map((taxista, index) => ({
+        taxistaId: taxista.id,
+        nombreCompleto: taxista.nombreCompleto,
+        numeroTaxi: taxista.vehiculo?.numeroTaxi || null,
+        posicion: index + 1,
+        enParadaDesde: taxista.enParadaDesde,
+      })),
+    }));
 
-        return res.json(resultado);
-    } catch (error) {
-        console.error("Error /mobile/paradas-resumen:", error.message);
-        return res.status(500).json({
-            error: "No se pudieron cargar las paradas",
-        });
-    }
+    return res.json(resultado);
+  } catch (error) {
+    console.error("Error /mobile/paradas-resumen:", error.message);
+    return res.status(500).json({
+      error: "No se pudieron cargar las paradas",
+    });
+  }
 });
 
-router.get("/objetos-perdidos", async (req, res) => {
+router.get("/objetos-perdidos", authTaxista, async (req, res) => {
   try {
+    const taxistaId = req.taxistaAuth.taxistaId;
+
     const objetos = await prisma.objetoPerdido.findMany({
+      where: {
+        taxistaId,
+      },
       orderBy: {
         creadoEn: "desc",
       },
@@ -298,6 +303,25 @@ router.post("/objetos-perdidos", authTaxista, async (req, res) => {
 router.patch("/objetos-perdidos/:id/entregar", authTaxista, async (req, res) => {
   try {
     const { id } = req.params;
+    const taxistaId = req.taxistaAuth.taxistaId;
+
+    const existente = await prisma.objetoPerdido.findUnique({
+      where: { id },
+    });
+
+    if (!existente) {
+      return res.status(404).json({
+        ok: false,
+        error: "Objeto no encontrado",
+      });
+    }
+
+    if (existente.taxistaId !== taxistaId) {
+      return res.status(403).json({
+        ok: false,
+        error: "No puedes modificar un objeto de otro taxista",
+      });
+    }
 
     const objeto = await prisma.objetoPerdido.update({
       where: { id },
@@ -338,6 +362,25 @@ router.patch("/objetos-perdidos/:id/entregar", authTaxista, async (req, res) => 
 router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
   try {
     const { id } = req.params;
+    const taxistaId = req.taxistaAuth.taxistaId;
+
+    const existente = await prisma.objetoPerdido.findUnique({
+      where: { id },
+    });
+
+    if (!existente) {
+      return res.status(404).json({
+        ok: false,
+        error: "Objeto no encontrado",
+      });
+    }
+
+    if (existente.taxistaId !== taxistaId) {
+      return res.status(403).json({
+        ok: false,
+        error: "No puedes eliminar un objeto de otro taxista",
+      });
+    }
 
     await prisma.objetoPerdido.delete({
       where: { id },
@@ -358,9 +401,32 @@ router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
 
 router.get("/public/objetos-perdidos", async (req, res) => {
   try {
-    const q = (req.query.q || "").toString().trim().toLowerCase();
+    const q = (req.query.q || "").toString().trim();
 
     const objetos = await prisma.objetoPerdido.findMany({
+      where: {
+        estado: {
+          not: "entregado",
+        },
+        ...(q
+          ? {
+            OR: [
+              { descripcion: { contains: q } },
+              { observaciones: { contains: q } },
+              { estado: { contains: q } },
+              {
+                taxista: {
+                  vehiculo: {
+                    numeroTaxi: {
+                      contains: q,
+                    },
+                  },
+                },
+              },
+            ],
+          }
+          : {}),
+      },
       orderBy: {
         creadoEn: "desc",
       },
@@ -373,7 +439,7 @@ router.get("/public/objetos-perdidos", async (req, res) => {
       },
     });
 
-    let resultado = objetos.map((item) => ({
+    const resultado = objetos.map((item) => ({
       id: item.id,
       descripcion: item.descripcion,
       observaciones: item.observaciones || null,
@@ -381,22 +447,6 @@ router.get("/public/objetos-perdidos", async (req, res) => {
       numeroTaxi: item.taxista?.vehiculo?.numeroTaxi || null,
       estado: item.estado,
     }));
-
-    if (q) {
-      resultado = resultado.filter((item) => {
-        const texto = [
-          item.descripcion,
-          item.observaciones,
-          item.numeroTaxi,
-          item.estado,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return texto.includes(q);
-      });
-    }
 
     return res.json(resultado);
   } catch (error) {

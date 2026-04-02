@@ -222,23 +222,21 @@ async function enviarPushOferta(expoPushToken, solicitud) {
       type: "oferta",
       solicitudId: solicitud.id,
     },
+    priority: "high",
+    channelId: "default",
   };
 
-  try {
-    const response = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(mensaje),
-    });
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(mensaje),
+  });
 
-    const result = await response.text();
-    console.log("Resultado Expo push:", result);
-  } catch (error) {
-    console.error("Error enviando push:", error.message);
-  }
+  const result = await response.text();
+  console.log("Resultado Expo push:", result);
 }
 
 async function emitirOfertaATaxista({ solicitud, taxista }) {

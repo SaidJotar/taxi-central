@@ -21,7 +21,7 @@ const RADIO_ENTRADA_PARADA_METROS = 40;
 const RADIO_SALIDA_PARADA_METROS = 80;
 const TIEMPO_CONFIRMACION_PARADA_MS = 10000;
 const COOLDOWN_RECHAZO_PARADA_MS = 60000;
-const GPS_CADUCADO_MS = 60000;
+const GPS_CADUCADO_MS = 120000;
 
 function limpiarTimerAutoEntrada(taxistaId) {
   const timer = autoEntradaParadaTimers.get(taxistaId);
