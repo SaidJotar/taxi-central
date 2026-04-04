@@ -1,0 +1,35 @@
+export const UI = {
+  colors: {
+    bg: "#f8fafc",
+    surface: "#ffffff",
+    text: "#0f172a",
+    textSoft: "#64748b",
+    primary: "#2563eb",
+    success: "#16a34a",
+    danger: "#dc2626",
+    warning: "#f59e0b",
+    border: "#e2e8f0",
+    muted: "#f1f5f9",
+  },
+  radius: {
+    sm: 10,
+    md: 14,
+    lg: 18,
+    xl: 24,
+    pill: 999,
+  },
+  spacing: {
+    xs: 6,
+    sm: 10,
+    md: 16,
+    lg: 20,
+    xl: 24,
+  },
+  shadowCard: {
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 20,
+    elevation: 4,
+  },
+};

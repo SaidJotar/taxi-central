@@ -1,0 +1,20 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+, "src/screens/InicioScreen.js", "src/context/AuthContext.js", "src/api/socket.js", "src/api/client.js", "src/components/OfertaCard.js", "src/screens/ParadasScreen.js", "app/_layout.js", "src/screens/ObjetosScreen.js", "src/screens/ServiciosScreen.js"  ]
+}
