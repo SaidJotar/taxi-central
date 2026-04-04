@@ -32,6 +32,8 @@ model Taxista {
   ofertas      OfertaSolicitud[]
 
   expoPushToken         String?
+  sessionVersion        Int      @default(1)
+  ultimoAccesoEn             DateTime?
   objetosPerdidos ObjetoPerdido[]
 }
 
@@ -40,8 +42,8 @@ model Vehiculo {
   taxistaId    String                @unique
   numeroTaxi   String                @unique
   matricula    String?
+  marca        String?
   modelo       String?
-  color        String?
   creadoEn     DateTime              @default(now())
   asignaciones AsignacionSolicitud[]
   taxista      Taxista               @relation(fields: [taxistaId], references: [id], onDelete: Cascade)

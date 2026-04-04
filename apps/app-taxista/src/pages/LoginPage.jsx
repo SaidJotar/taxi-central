@@ -14,8 +14,8 @@ export default function LoginPage({ onLogin }) {
         password: "",
         numeroTaxi: "",
         matricula: "",
+        marca: "",
         modelo: "",
-        color: "",
     });
 
     const [codigo, setCodigo] = useState("");
@@ -270,15 +270,15 @@ export default function LoginPage({ onLogin }) {
                                 onChange={handleChange}
                             />
                             <input
-                                name="modelo"
-                                placeholder="Modelo"
-                                value={form.modelo}
+                                name="marca"
+                                placeholder="Marca"
+                                value={form.marca}
                                 onChange={handleChange}
                             />
                             <input
-                                name="color"
-                                placeholder="Color"
-                                value={form.color}
+                                name="modelo"
+                                placeholder="Modelo"
+                                value={form.modelo}
                                 onChange={handleChange}
                             />
                         </>

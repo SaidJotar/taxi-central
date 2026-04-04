@@ -7,4 +7,3 @@ coverage
 apps/app-taxista/node_modules
 apps/app-taxista/dist
 src/scripts/
-taxi-app

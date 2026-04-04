@@ -9,28 +9,21 @@ function fechaGpsMinima() {
   return new Date(Date.now() - GPS_RECIENTE_MS);
 }
 
-async function buscarCualquierTaxiDisponible(taxistasExcluidos = []) {
-  const taxistas = await prisma.taxista.findMany({
-    where: {
-      estado: "disponible",
-      id: {
-        notIn: taxistasExcluidos,
-      },
-      vehiculo: {
-        isNot: null,
-      },
+async function consultarReceiptExpo(ticketId) {
+  const response = await fetch("https://exp.host/--/api/v2/push/getReceipts", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
-    include: {
-      vehiculo: true,
-    },
-    orderBy: {
-      creadoEn: "asc",
-    },
+    body: JSON.stringify({
+      ids: [ticketId],
+    }),
   });
 
-  if (!taxistas.length) return null;
-
-  return taxistas[0];
+  const result = await response.json();
+  console.log("Receipt Expo:", JSON.stringify(result, null, 2));
+  return result;
 }
 
 async function buscarTaxiEnParada(paradaId, taxistasExcluidos = []) {
@@ -204,7 +197,7 @@ async function intentarOfertarSolicitudPendienteATaxista(taxistaId) {
   });
 }
 
-async function enviarPushOferta(expoPushToken, solicitud) {
+async function enviarPushOferta(expoPushToken, solicitud, oferta, taxistaId) {
   if (!expoPushToken) {
     console.log("No hay expoPushToken guardado");
     return;
@@ -220,6 +213,7 @@ async function enviarPushOferta(expoPushToken, solicitud) {
       "Tienes una nueva oferta",
     data: {
       type: "oferta",
+      ofertaId: oferta.id,
       solicitudId: solicitud.id,
     },
     priority: "high",
@@ -235,8 +229,35 @@ async function enviarPushOferta(expoPushToken, solicitud) {
     body: JSON.stringify(mensaje),
   });
 
-  const result = await response.text();
-  console.log("Resultado Expo push:", result);
+  const result = await response.json();
+  console.log("Resultado Expo push:", JSON.stringify(result, null, 2));
+
+  const ticketId = result?.data?.id;
+  if (!ticketId) {
+    return result;
+  }
+
+  setTimeout(async () => {
+    try {
+      const receiptResult = await consultarReceiptExpo(ticketId);
+      const receipt = receiptResult?.data?.[ticketId];
+
+      if (receipt?.details?.error === "DeviceNotRegistered") {
+        console.log("Token inválido. Limpiando expoPushToken del taxista:", taxistaId);
+
+        await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            expoPushToken: null,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Error consultando receipt Expo:", error);
+    }
+  }, 15000);
+
+  return result;
 }
 
 async function emitirOfertaATaxista({ solicitud, taxista }) {
@@ -265,7 +286,18 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
     },
   });
 
-  enviarPushOferta(taxista.expoPushToken, solicitud);
+  console.log("TOKEN BD:", taxista.expoPushToken);
+
+  try {
+    await enviarPushOferta(
+      taxista.expoPushToken,
+      solicitud,
+      oferta,
+      taxista.id
+    );
+  } catch (e) {
+    console.error("Error enviando push oferta:", e);
+  }
 
   programarTimeoutOferta(oferta.id);
 

@@ -1007,6 +1007,20 @@ function iniciarSocket(server) {
       }
     });
 
+    socket.on("taxista:cuantos_disponibles", async (_, callback) => {
+      try {
+        const count = await prisma.taxista.count({
+          where: {
+            estado: "disponible",
+          },
+        });
+        callback({ disponibles: count });
+      } catch (error) {
+        console.error("Error taxistas:cuantos_disponibles:", error.message);
+        callback({ disponibles: null });
+      }
+    });
+
     socket.on("disconnect", async (reason) => {
       const taxistaId = socket.taxistaAuth?.taxistaId;
 

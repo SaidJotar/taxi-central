@@ -9,6 +9,7 @@ function firmarTokenTaxista(taxista) {
       sub: taxista.id,
       tipo: "taxista",
       telefono: taxista.telefono,
+      sessionVersion: taxista.sessionVersion ?? 1,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }

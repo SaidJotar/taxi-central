@@ -1,34 +1,9 @@
 const express = require("express");
 const prisma = require("../services/bd");
 const { verificarToken } = require("../services/authToken");
+const authTaxista = require("../routes/authTaxista");
 
 const router = express.Router();
-
-function authTaxista(req, res, next) {
-  try {
-    const auth = req.headers.authorization || "";
-    const token = auth.replace("Bearer ", "").trim();
-
-    if (!token) {
-      return res.status(401).json({ error: "Token requerido" });
-    }
-
-    const payload = verificarToken(token);
-
-    if (!payload || payload.tipo !== "taxista") {
-      return res.status(401).json({ error: "Token inválido" });
-    }
-
-    req.taxistaAuth = {
-      taxistaId: payload.sub,
-      telefono: payload.telefono,
-    };
-
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: "No autorizado" });
-  }
-}
 
 router.post("/push-token", authTaxista, async (req, res) => {
   try {
@@ -87,7 +62,7 @@ router.get("/oferta-pendiente", authTaxista, async (req, res) => {
     }
 
     const expiresAt = new Date(
-      new Date(oferta.creadaEn).getTime() + 10000
+      new Date(oferta.ofrecidaEn).getTime() + 10000
     ).toISOString();
 
     return res.json({
