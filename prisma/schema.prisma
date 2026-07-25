@@ -7,115 +7,160 @@ datasource db {
 }
 
 model Taxista {
-  id             String        @id @default(uuid())
-  nombreCompleto String
-  telefono       String        @unique
-  passwordHash   String
-  estado         EstadoTaxista
-  creadoEn       DateTime      @default(now())
+  id                         String                 @id @default(uuid())
+  nombreCompleto             String
+  telefono                   String                 @unique
+  passwordHash               String
+  estado                     EstadoTaxista
+  creadoEn                   DateTime               @default(now())
 
-  telefonoVerificado         Boolean   @default(false)
+  telefonoVerificado         Boolean                @default(false)
   codigoVerificacion         String?
   codigoVerificacionExpiraEn DateTime?
   ultimoEnvioCodigo          DateTime?
 
-  lat                    Float?
-  lng                    Float?
-  ubicacionActualizadaEn DateTime?
+  lat                        Float?
+  lng                        Float?
+  ubicacionActualizadaEn     DateTime?
 
-  paradaId      String?
-  enParadaDesde DateTime?
-  parada        Parada?   @relation("TaxistasEnParada", fields: [paradaId], references: [id])
+  paradaId                   String?
+  enParadaDesde              DateTime?
+  parada                     Parada?                @relation("TaxistasEnParada", fields: [paradaId], references: [id])
 
-  vehiculo     Vehiculo?
-  asignaciones AsignacionSolicitud[]
-  ofertas      OfertaSolicitud[]
+  vehiculo                   Vehiculo?
+  asignaciones               AsignacionSolicitud[]
+  ofertas                    OfertaSolicitud[]
 
-  expoPushToken         String?
-  sessionVersion        Int      @default(1)
+  expoPushToken              String?
+  sessionVersion             Int                    @default(1)
   ultimoAccesoEn             DateTime?
-  objetosPerdidos ObjetoPerdido[]
+
+  objetosPerdidos            ObjetoPerdido[]
+  mensajesEnviados           MensajeSolicitud[]     @relation("MensajesTaxista")
 }
 
 model Vehiculo {
-  id           String                @id @default(uuid())
-  taxistaId    String                @unique
-  numeroTaxi   String                @unique
-  matricula    String?
-  marca        String?
-  modelo       String?
-  creadoEn     DateTime              @default(now())
-  asignaciones AsignacionSolicitud[]
-  taxista      Taxista               @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  id                         String                 @id @default(uuid())
+  taxistaId                  String                 @unique
+  numeroTaxi                 String                 @unique
+  matricula                  String?
+  marca                      String?
+  modelo                     String?
+  creadoEn                   DateTime               @default(now())
+
+  asignaciones               AsignacionSolicitud[]
+  taxista                    Taxista                @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
 }
 
 model SolicitudViaje {
-  id                String           @id @default(uuid())
-  nombreCliente     String
-  telefonoCliente   String
-  direccionRecogida String
-  direccionBase        String?
-  referenciaRecogida   String?
-  estado            EstadoSolicitud
-  origen            OrigenSolicitud?
-  creadaEn          DateTime         @default(now())
-  confirmadaEn      DateTime?
+  id                         String                 @id @default(uuid())
+  nombreCliente              String
+  telefonoCliente            String
+  direccionRecogida          String
+  direccionBase              String?
+  referenciaRecogida         String?
+  estado                     EstadoSolicitud
+  origen                     OrigenSolicitud?
+  creadaEn                   DateTime               @default(now())
+  confirmadaEn               DateTime?
 
-  latRecogida Float?
-  lngRecogida Float?
+  latRecogida                Float?
+  lngRecogida                Float?
 
-  paradaSugeridaId String?
-  paradaSugerida   Parada? @relation("ParadaSugeridaSolicitud", fields: [paradaSugeridaId], references: [id])
+  paradaSugeridaId           String?
+  paradaSugerida             Parada?                @relation("ParadaSugeridaSolicitud", fields: [paradaSugeridaId], references: [id])
 
-  asignacion AsignacionSolicitud?
-  ofertas    OfertaSolicitud[]
+  // Inicio / fin de servicio
+  recogidaIniciadaEn         DateTime?
+  completadaEn               DateTime?
+  costoFinal                 Float?
+  duracionMinutos            Int?
+  distanciaMetrosEst         Int?
+
+  // Valoración del cliente
+  ratingCliente              Int?
+  comentarioRating           String?
+
+  asignacion                 AsignacionSolicitud?
+  ofertas                    OfertaSolicitud[]
+  mensajes                   MensajeSolicitud[]
+
+  @@index([estado])
+  @@index([creadaEn])
+  @@index([paradaSugeridaId])
 }
 
 model OfertaSolicitud {
-  id               String         @id @default(uuid())
-  solicitudViajeId String
-  taxistaId        String
-  estado           EstadoOferta   @default(pendiente)
-  ofrecidaEn       DateTime       @default(now())
-  respondidaEn     DateTime?
-  solicitudViaje   SolicitudViaje @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
-  taxista          Taxista        @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  id                         String                 @id @default(uuid())
+  solicitudViajeId           String
+  taxistaId                  String
+  estado                     EstadoOferta           @default(pendiente)
+  ofrecidaEn                 DateTime               @default(now())
+  respondidaEn               DateTime?
+
+  solicitudViaje             SolicitudViaje         @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  taxista                    Taxista                @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+
+  @@index([solicitudViajeId, estado])
+  @@index([taxistaId, estado])
 }
 
 model AsignacionSolicitud {
-  id               String         @id @default(uuid())
-  solicitudViajeId String         @unique
-  taxistaId        String
-  vehiculoId       String
-  asignadaEn       DateTime       @default(now())
-  solicitudViaje   SolicitudViaje @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
-  taxista          Taxista        @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
-  vehiculo         Vehiculo       @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  id                         String                 @id @default(uuid())
+  solicitudViajeId           String                 @unique
+  taxistaId                  String
+  vehiculoId                 String
+  asignadaEn                 DateTime               @default(now())
+
+  solicitudViaje             SolicitudViaje         @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  taxista                    Taxista                @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  vehiculo                   Vehiculo               @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+
+  @@index([taxistaId])
+  @@index([vehiculoId])
 }
 
 model Parada {
-  id        String   @id @default(uuid())
-  nombre    String   @unique
-  direccion String?
-  lat       Float
-  lng       Float
-  activa    Boolean  @default(true)
-  creadoEn  DateTime @default(now())
+  id                         String                 @id @default(uuid())
+  nombre                     String                 @unique
+  direccion                  String?
+  lat                        Float
+  lng                        Float
+  activa                     Boolean                @default(true)
+  creadoEn                   DateTime               @default(now())
 
-  taxistas             Taxista[]        @relation("TaxistasEnParada")
-  solicitudesSugeridas SolicitudViaje[] @relation("ParadaSugeridaSolicitud")
+  taxistas                   Taxista[]              @relation("TaxistasEnParada")
+  solicitudesSugeridas       SolicitudViaje[]       @relation("ParadaSugeridaSolicitud")
 }
 
 model ObjetoPerdido {
-  id             String   @id @default(uuid())
-  descripcion    String
-  observaciones  String?
-  estado         EstadoObjetoPerdido @default(pendiente)
-  fechaHallazgo  DateTime @default(now())
-  creadoEn       DateTime @default(now())
+  id                         String                 @id @default(uuid())
+  descripcion                String
+  observaciones              String?
+  estado                     EstadoObjetoPerdido    @default(pendiente)
+  fechaHallazgo              DateTime               @default(now())
+  creadoEn                   DateTime               @default(now())
 
-  taxistaId      String
-  taxista        Taxista  @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+  taxistaId                  String
+  taxista                    Taxista                @relation(fields: [taxistaId], references: [id], onDelete: Cascade)
+
+  @@index([taxistaId, estado])
+}
+
+model MensajeSolicitud {
+  id                         String                 @id @default(uuid())
+  solicitudViajeId           String
+  emisorTipo                 TipoEmisorMensaje
+  emisorTaxistaId            String?
+  texto                      String
+  leido                      Boolean                @default(false)
+  creadoEn                   DateTime               @default(now())
+
+  solicitudViaje             SolicitudViaje         @relation(fields: [solicitudViajeId], references: [id], onDelete: Cascade)
+  emisorTaxista              Taxista?               @relation("MensajesTaxista", fields: [emisorTaxistaId], references: [id], onDelete: SetNull)
+
+  @@index([solicitudViajeId, creadoEn])
+  @@index([emisorTaxistaId])
 }
 
 enum EstadoObjetoPerdido {
@@ -149,4 +194,10 @@ enum OrigenSolicitud {
   llamada_ia
   operador
   web
+  app_cliente
+}
+
+enum TipoEmisorMensaje {
+  cliente
+  taxista
 }
