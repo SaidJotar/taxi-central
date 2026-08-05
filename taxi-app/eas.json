@@ -4,8 +4,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://2afe-79-116-220-101.ngrok-free.app",
-        "EXPO_PUBLIC_SOCKET_URL": "https://2afe-79-116-220-101.ngrok-free.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://dev-api.sjaceuta.es",
+        "EXPO_PUBLIC_SOCKET_URL": "https://dev-api.sjaceuta.es"
       }
     },
     "preview": {
