@@ -50,11 +50,6 @@ function limpiarTimerAutoEntrada(taxistaId) {
   }
 }
 
-function limpiarSugerenciaParada(taxistaId) {
-  sugerenciasParada.delete(taxistaId);
-  limpiarTimerAutoEntrada(taxistaId);
-}
-
 function cancelarSugerenciaParada(socket, taxistaId, motivo = "salio_del_radio") {
   const sugerencia = sugerenciasParada.get(taxistaId);
 
@@ -88,7 +83,6 @@ async function desconectarTaxistasSinGps() {
   const taxistas = await prisma.taxista.findMany({
     where: {
       estado: "disponible",
-      paradaId: null,
       OR: [
         { ubicacionActualizadaEn: null },
         { ubicacionActualizadaEn: { lt: limite } },
@@ -101,12 +95,8 @@ async function desconectarTaxistasSinGps() {
   });
 
   for (const taxista of taxistas) {
-    console.log("🧪 taxista sin GPS reciente", {
-      taxistaId: taxista.id,
-      estado: taxista.estado,
-      ubicacionActualizadaEn: taxista.ubicacionActualizadaEn,
-      ahora: new Date().toISOString(),
-    });
+    const paradaAnteriorId = taxista.paradaId || null;
+
     const actualizado = await prisma.taxista.update({
       where: { id: taxista.id },
       data: {
@@ -123,15 +113,22 @@ async function desconectarTaxistasSinGps() {
     sugerenciasParada.delete(taxista.id);
     limpiarTimerAutoEntrada(taxista.id);
 
-    io.to(`taxista:${taxista.id}`).emit("taxista:estado_actualizado", {
-      ok: true,
-      taxista: actualizado,
-    });
+    io.to(`taxista:${taxista.id}`).emit(
+      "taxista:estado_actualizado",
+      {
+        ok: true,
+        taxista: actualizado,
+      }
+    );
 
     io.to(`taxista:${taxista.id}`).emit("taxista:gps_requerido", {
       ok: false,
       message: "GPS inactivo. Has sido pasado a desconectado.",
     });
+
+    if (paradaAnteriorId) {
+      await emitirColaParadaActualizada(paradaAnteriorId);
+    }
   }
 }
 
@@ -259,24 +256,27 @@ function iniciarSocket(server) {
           return;
         }
 
-        if (estado === "disponible") {
-          const actual = await prisma.taxista.findUnique({
-            where: { id: taxistaId },
-            include: {
-              vehiculo: true,
-              parada: true,
-            },
+        const actual = await prisma.taxista.findUnique({
+          where: { id: taxistaId },
+          include: {
+            vehiculo: true,
+            parada: true,
+          },
+        });
+
+        if (!actual) {
+          socket.emit("error:general", {
+            message: "Taxista no encontrado",
           });
+          return;
+        }
 
+        if (estado === "disponible") {
           const gpsReciente =
-            actual?.ubicacionActualizadaEn &&
-            Date.now() - new Date(actual.ubicacionActualizadaEn).getTime() <=
+            actual.ubicacionActualizadaEn &&
+            Date.now() -
+            new Date(actual.ubicacionActualizadaEn).getTime() <=
             GPS_CADUCADO_MS;
-
-          console.log("🧪 taxista:cambiar_estado disponible");
-          console.log("taxistaId:", taxistaId);
-          console.log("ubicacionActualizadaEn:", actual?.ubicacionActualizadaEn);
-          console.log("gpsReciente:", gpsReciente);
 
           if (!gpsReciente) {
             socket.emit("taxista:gps_requerido", {
@@ -287,15 +287,22 @@ function iniciarSocket(server) {
             socket.emit("error:general", {
               message: "GPS inactivo o sin actualizar",
             });
+
             return;
           }
         }
 
-        const dataUpdate = { estado };
+        // Guardamos la parada antes de eliminarla
+        const paradaAnteriorId = actual.paradaId || null;
+
+        const dataUpdate = {
+          estado,
+        };
 
         if (estado !== "disponible") {
           dataUpdate.paradaId = null;
           dataUpdate.enParadaDesde = null;
+
           limpiarSugerenciaParada(taxistaId);
         }
 
@@ -313,15 +320,23 @@ function iniciarSocket(server) {
           taxista,
         });
 
-        if (estado === "disponible") {
-          const oferta = await intentarOfertarSolicitudPendienteATaxista(
-            taxistaId
-          );
+        // Si salió de una parada, avisar a todos con la nueva cola
+        if (
+          paradaAnteriorId &&
+          estado !== "disponible"
+        ) {
+          await emitirColaParadaActualizada(paradaAnteriorId);
+        }
 
+        if (estado === "disponible") {
+          await intentarOfertarSolicitudPendienteATaxista(taxistaId);
         }
       } catch (error) {
         console.error("Error taxista:cambiar_estado:", error.message);
-        socket.emit("error:general", { message: error.message });
+
+        socket.emit("error:general", {
+          message: error.message,
+        });
       }
     });
 
@@ -349,14 +364,14 @@ function iniciarSocket(server) {
           });
           return;
         }
-
+        /*
         console.log("📍 backend recibe ubicación", {
           taxistaId,
           lat,
           lng,
           at: new Date().toISOString(),
         });
-
+*/
         const taxista = await prisma.taxista.update({
           where: { id: taxistaId },
           data: {
@@ -939,13 +954,67 @@ function iniciarSocket(server) {
       }
     });
 
-    socket.on("servicio:terminar", async ({ solicitudId }) => {
+    socket.on("chat:enviar", async ({ solicitudId, texto }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId || !solicitudId || !texto?.trim()) {
+          socket.emit("error:general", {
+            message: "Faltan datos del mensaje",
+          });
+          return;
+        }
+
+        const solicitud = await prisma.solicitudViaje.findUnique({
+          where: { id: solicitudId },
+          include: {
+            asignacion: true,
+          },
+        });
+
+        if (!solicitud?.asignacion || solicitud.asignacion.taxistaId !== taxistaId) {
+          socket.emit("error:general", {
+            message: "No autorizado para este chat",
+          });
+          return;
+        }
+
+        const mensaje = await prisma.mensajeSolicitud.create({
+          data: {
+            solicitudViajeId: solicitudId,
+            emisorTipo: "taxista",
+            emisorTaxistaId: taxistaId,
+            texto: texto.trim(),
+          },
+        });
+
+        socket.emit("chat:mensaje_enviado_ok", {
+          ok: true,
+          solicitudId,
+          mensaje,
+        });
+      } catch (error) {
+        console.error("Error chat:enviar:", error.message);
+        socket.emit("error:general", { message: error.message });
+      }
+    });
+
+    socket.on("servicio:terminar", async ({ solicitudId, costoFinal }) => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;
 
         if (!solicitudId || !taxistaId) {
           socket.emit("error:general", {
             message: "Faltan datos para terminar el servicio",
+          });
+          return;
+        }
+
+        const costo = Number(costoFinal);
+
+        if (!Number.isFinite(costo) || costo < 0) {
+          socket.emit("error:general", {
+            message: "Coste final inválido",
           });
           return;
         }
@@ -975,6 +1044,8 @@ function iniciarSocket(server) {
           where: { id: solicitudId },
           data: {
             estado: "completada",
+            completadaEn: new Date(),
+            costoFinal: costo,
           },
         });
 
@@ -993,6 +1064,9 @@ function iniciarSocket(server) {
           },
         });
 
+        limpiarSugerenciaParada(taxistaId);
+        limpiarTimerAutoEntrada(taxistaId);
+
         socket.emit("servicio:terminado_ok", {
           ok: true,
           solicitudId,
@@ -1000,7 +1074,6 @@ function iniciarSocket(server) {
         });
 
         const oferta = await intentarOfertarSolicitudPendienteATaxista(taxistaId);
-
       } catch (error) {
         console.error("Error servicio:terminar:", error.message);
         socket.emit("error:general", { message: error.message });
@@ -1021,15 +1094,173 @@ function iniciarSocket(server) {
       }
     });
 
+    socket.on("taxista:posicion_en_cola", async (_, callback) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId) {
+          callback({ posicion: null });
+          return;
+        }
+
+        const taxista = await prisma.taxista.findUnique({
+          where: { id: taxistaId },
+          include: { parada: true },
+        });
+
+        if (!taxista?.paradaId) {
+          callback({ posicion: null });
+          return;
+        }
+
+        const cola = await prisma.taxista.findMany({
+          where: {
+            paradaId: taxista.paradaId,
+            estado: "disponible",
+            enParadaDesde: { not: null },
+          },
+          orderBy: {
+            enParadaDesde: "asc",
+          },
+        });
+
+        const posicion = cola.findIndex((t) => t.id === taxistaId) + 1;
+
+        callback({ posicion });
+      } catch (error) {
+        console.error("Error taxista:posicion_en_cola:", error.message);
+        callback({ posicion: null });
+      }
+    });
+
     socket.on("disconnect", async (reason) => {
       const taxistaId = socket.taxistaAuth?.taxistaId;
 
       try {
-        if (taxistaId) {
-          limpiarTimerAutoEntrada(taxistaId);
-        }
+        if (!taxistaId) return;
+
+        limpiarSugerenciaParada(taxistaId);
+
+        console.log("🔴 Socket taxista desconectado", {
+          taxistaId,
+          reason,
+        });
+
+        // Esperar un poco por si Socket.IO reconecta inmediatamente.
+        setTimeout(async () => {
+          try {
+            // Comprobar si el taxista ya tiene otra conexión activa.
+            const socketsActivos = await io
+              .in(`taxista:${taxistaId}`)
+              .fetchSockets();
+
+            if (socketsActivos.length > 0) {
+              console.log("🟢 El taxista ya se ha reconectado", {
+                taxistaId,
+                socketsActivos: socketsActivos.length,
+              });
+              return;
+            }
+
+            const actual = await prisma.taxista.findUnique({
+              where: { id: taxistaId },
+              include: {
+                vehiculo: true,
+                parada: true,
+              },
+            });
+
+            if (!actual) return;
+
+            // Si está prestando un servicio, no cambiarlo automáticamente.
+            if (actual.estado === "ocupado") {
+              console.log(
+                "⚠️ Taxista ocupado desconectado; se mantiene ocupado:",
+                taxistaId
+              );
+              return;
+            }
+
+            const paradaAnteriorId = actual.paradaId || null;
+
+            const actualizado = await prisma.taxista.update({
+              where: { id: taxistaId },
+              data: {
+                estado: "desconectado",
+                paradaId: null,
+                enParadaDesde: null,
+              },
+              include: {
+                vehiculo: true,
+                parada: true,
+              },
+            });
+
+            console.log("⚪ Taxista pasado a desconectado", {
+              taxistaId,
+              paradaAnteriorId,
+            });
+
+            io.to(`taxista:${taxistaId}`).emit(
+              "taxista:estado_actualizado",
+              {
+                ok: true,
+                taxista: actualizado,
+              }
+            );
+
+            // Recalcular la cola para los taxis que siguen en la parada.
+            if (paradaAnteriorId) {
+              await emitirColaParadaActualizada(paradaAnteriorId);
+            }
+          } catch (error) {
+            console.error(
+              "Error actualizando taxista tras disconnect:",
+              error.message
+            );
+          }
+        }, 5000);
       } catch (error) {
         console.error("Error en disconnect:", error.message);
+      }
+    });
+
+    socket.on("chat:enviar", async ({ solicitudId, texto }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!taxistaId || !solicitudId || !texto?.trim()) {
+          socket.emit("error:general", { message: "Faltan datos del mensaje" });
+          return;
+        }
+
+        const solicitud = await prisma.solicitudViaje.findUnique({
+          where: { id: solicitudId },
+          include: { asignacion: true },
+        });
+
+        if (!solicitud?.asignacion || solicitud.asignacion.taxistaId !== taxistaId) {
+          socket.emit("error:general", { message: "No autorizado para este chat" });
+          return;
+        }
+
+        const mensaje = await prisma.mensajeSolicitud.create({
+          data: {
+            solicitudViajeId: solicitudId,
+            emisorTipo: "taxista",
+            emisorId: taxistaId,
+            texto: texto.trim(),
+          },
+        });
+
+        socket.emit("chat:mensaje_enviado_ok", {
+          ok: true,
+          solicitudId,
+          mensaje,
+        });
+      } catch (error) {
+        console.error("Error chat:enviar:", error.message);
+        socket.emit("error:general", { message: error.message });
       }
     });
   });

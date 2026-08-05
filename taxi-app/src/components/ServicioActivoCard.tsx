@@ -13,7 +13,6 @@ export default function ServicioActivoCard({ servicio, onTerminar }: Props) {
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Servicio activo</Text>
-      <Text>Cliente: {servicio.nombreCliente || "No disponible"}</Text>
       <Text>Teléfono: {servicio.telefonoCliente || "No disponible"}</Text>
       <Text>
         Recogida: {servicio.direccionBase || servicio.direccionRecogida || "No disponible"}

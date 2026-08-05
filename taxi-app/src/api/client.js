@@ -129,8 +129,8 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  marcarObjetoEntregado: (token, id) =>
-    request(`/mobile/objetos-perdidos/${id}/entregar`, {
+  entregarObjetoEnCentral: (token, id) =>
+    request(`/mobile/objetos-perdidos/${id}/entregar-central`, {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -167,5 +167,10 @@ export const api = {
     request("/auth/reset-password", {
       method: "POST",
       body: JSON.stringify({ telefono, codigo, nuevaPassword }),
+    }),
+
+  getMensajes: (solicitudId) =>
+    request(`/cliente/mensajes/${encodeURIComponent(solicitudId)}`, {
+      method: "GET",
     }),
 };

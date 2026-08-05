@@ -60,11 +60,6 @@ export default function OfertaCard({ oferta, onAceptar, onRechazar }) {
       <Text style={styles.title}>Servicio disponible</Text>
 
       <View style={styles.infoBox}>
-        <Text style={styles.label}>Cliente</Text>
-        <Text style={styles.value}>{oferta?.solicitud?.nombreCliente || "-"}</Text>
-      </View>
-
-      <View style={styles.infoBox}>
         <Text style={styles.label}>Teléfono</Text>
         <Text style={styles.value}>{oferta?.solicitud?.telefonoCliente || "-"}</Text>
       </View>

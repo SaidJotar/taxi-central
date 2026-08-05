@@ -1,6 +1,12 @@
 import React, { useEffect, useRef } from "react";
 import { Tabs, useRouter, useSegments } from "expo-router";
-import { ActivityIndicator, View, TouchableOpacity } from "react-native";
+import {
+  ActivityIndicator,
+  View,
+  TouchableOpacity,
+  StatusBar,
+  Alert,
+} from "react-native";
 import * as Notifications from "expo-notifications";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -75,8 +81,28 @@ function AppContent() {
 
   useEffect(() => {
     notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("🔔 Notificación recibida:", notification);
+      Notifications.addNotificationReceivedListener(async (notification) => {
+        try {
+          console.log("🔔 Notificación recibida:", notification);
+
+          if (!token) return;
+
+          const ofertaPendiente = await api.getOfertaPendiente(token);
+
+          console.log(
+            "📦 Oferta pendiente al recibir notificación:",
+            ofertaPendiente
+          );
+
+          if (ofertaPendiente) {
+            setOferta(ofertaPendiente);
+          }
+        } catch (error) {
+          console.log(
+            "❌ Error cargando oferta desde notificación:",
+            error?.message || error
+          );
+        }
       });
 
     responseListener.current =
@@ -216,10 +242,18 @@ function AppContent() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <OfertaProvider>
-        <AppContent />
-      </OfertaProvider>
-    </AuthProvider>
+    <>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={COLORS.card}
+        hidden={false}
+      />
+
+      <AuthProvider>
+        <OfertaProvider>
+          <AppContent />
+        </OfertaProvider>
+      </AuthProvider>
+    </>
   );
 }

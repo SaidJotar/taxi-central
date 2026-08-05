@@ -111,24 +111,44 @@ router.get("/servicios", authTaxista, async (req, res) => {
 
     const resultado = asignaciones.map((item) => ({
       id: item.solicitudViaje.id,
+
       fecha:
         item.solicitudViaje.confirmadaEn ||
         item.solicitudViaje.creadaEn ||
         item.asignadaEn,
-      cliente: item.solicitudViaje.nombreCliente || null,
+
+      cliente:
+        item.solicitudViaje.nombreCliente || null,
+
+      telefono:
+        item.solicitudViaje.telefonoCliente || null,
+
       recogida:
         item.solicitudViaje.direccionBase ||
         item.solicitudViaje.direccionRecogida ||
         null,
+
       taxista: item.taxista?.vehiculo?.numeroTaxi
         ? `Taxi ${item.taxista.vehiculo.numeroTaxi}`
         : item.taxista?.nombreCompleto || null,
-      estado: item.solicitudViaje.estado || "completada",
+
+      estado:
+        item.solicitudViaje.estado || "completada",
+
+      importe:
+        item.solicitudViaje.costoFinal ?? null,
+
+      rating:
+        item.solicitudViaje.ratingCliente ?? null,
+
+      comentarioRating:
+        item.solicitudViaje.comentarioRating ?? null,
     }));
 
     return res.json(resultado);
   } catch (error) {
     console.error("Error /mobile/servicios:", error);
+
     return res.status(500).json({
       error: "No se pudieron cargar los servicios",
       detalle: error.message,
@@ -193,6 +213,7 @@ router.get("/objetos-perdidos", authTaxista, async (req, res) => {
     const objetos = await prisma.objetoPerdido.findMany({
       where: {
         taxistaId,
+        estado: "con_taxista",
       },
       orderBy: {
         creadoEn: "desc",
@@ -219,6 +240,7 @@ router.get("/objetos-perdidos", authTaxista, async (req, res) => {
     return res.json(resultado);
   } catch (error) {
     console.error("Error /mobile/objetos-perdidos:", error);
+
     return res.status(500).json({
       error: "No se pudieron cargar los objetos perdidos",
       detalle: error.message,
@@ -243,6 +265,7 @@ router.post("/objetos-perdidos", authTaxista, async (req, res) => {
         descripcion: descripcion.trim(),
         observaciones: observaciones?.trim() || null,
         taxistaId,
+        estado: "con_taxista",
       },
       include: {
         taxista: {
@@ -334,6 +357,82 @@ router.patch("/objetos-perdidos/:id/entregar", authTaxista, async (req, res) => 
   }
 });
 
+router.patch(
+  "/objetos-perdidos/:id/entregar-central",
+  authTaxista,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const taxistaId = req.taxistaAuth.taxistaId;
+
+      const existente = await prisma.objetoPerdido.findUnique({
+        where: { id },
+      });
+
+      if (!existente) {
+        return res.status(404).json({
+          ok: false,
+          error: "Objeto no encontrado",
+        });
+      }
+
+      if (existente.taxistaId !== taxistaId) {
+        return res.status(403).json({
+          ok: false,
+          error: "No puedes modificar un objeto de otro taxista",
+        });
+      }
+
+      if (existente.estado !== "con_taxista") {
+        return res.status(409).json({
+          ok: false,
+          error: "Este objeto ya no está pendiente de entrega por el taxista",
+        });
+      }
+
+      const objeto = await prisma.objetoPerdido.update({
+        where: { id },
+        data: {
+          estado: "en_central",
+          entregadoCentralEn: new Date(),
+        },
+        include: {
+          taxista: {
+            include: {
+              vehiculo: true,
+            },
+          },
+        },
+      });
+
+      return res.json({
+        ok: true,
+        objeto: {
+          id: objeto.id,
+          descripcion: objeto.descripcion,
+          observaciones: objeto.observaciones,
+          fecha: objeto.fechaHallazgo,
+          taxistaNombre: objeto.taxista?.nombreCompleto || null,
+          numeroTaxi: objeto.taxista?.vehiculo?.numeroTaxi || null,
+          estado: objeto.estado,
+          entregadoCentralEn: objeto.entregadoCentralEn,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Error PATCH /mobile/objetos-perdidos/:id/entregar-central:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        error: "No se pudo entregar el objeto en la central",
+        detalle: error.message,
+      });
+    }
+  }
+);
+
 router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
   try {
     const { id } = req.params;
@@ -357,6 +456,13 @@ router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
       });
     }
 
+    if (existente.estado !== "con_taxista") {
+      return res.status(409).json({
+        ok: false,
+        error: "No puedes eliminar un objeto que ya fue entregado en la central",
+      });
+    }
+
     await prisma.objetoPerdido.delete({
       where: { id },
     });
@@ -365,7 +471,11 @@ router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
       ok: true,
     });
   } catch (error) {
-    console.error("Error DELETE /mobile/objetos-perdidos/:id:", error);
+    console.error(
+      "Error DELETE /mobile/objetos-perdidos/:id:",
+      error
+    );
+
     return res.status(500).json({
       ok: false,
       error: "No se pudo eliminar el objeto perdido",
@@ -376,58 +486,92 @@ router.delete("/objetos-perdidos/:id", authTaxista, async (req, res) => {
 
 router.get("/public/objetos-perdidos", async (req, res) => {
   try {
-    const q = (req.query.q || "").toString().trim().toLowerCase();
+    const q = (req.query.q || "")
+      .toString()
+      .trim()
+      .slice(0, 100);
+
+    const where = {
+      estado: "en_central",
+    };
+
+    if (q) {
+      where.OR = [
+        {
+          descripcion: {
+            contains: q,
+            mode: "insensitive",
+          },
+        },
+        {
+          observaciones: {
+            contains: q,
+            mode: "insensitive",
+          },
+        },
+        {
+          taxista: {
+            vehiculo: {
+              numeroTaxi: {
+                contains: q,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      ];
+    }
 
     const objetos = await prisma.objetoPerdido.findMany({
-      where: {
-        estado: {
-          not: "entregado",
-        },
-      },
-      orderBy: {
-        creadoEn: "desc",
-      },
-      include: {
+      where,
+      select: {
+        id: true,
+        descripcion: true,
+        observaciones: true,
+        fechaHallazgo: true,
+        entregadoCentralEn: true,
+        estado: true,
+
         taxista: {
-          include: {
-            vehiculo: true,
+          select: {
+            vehiculo: {
+              select: {
+                numeroTaxi: true,
+              },
+            },
           },
         },
       },
+      orderBy: [
+        {
+          entregadoCentralEn: "desc",
+        },
+        {
+          creadoEn: "desc",
+        },
+      ],
+      take: 100,
     });
 
-    let resultado = objetos.map((item) => ({
+    const resultado = objetos.map((item) => ({
       id: item.id,
       descripcion: item.descripcion,
       observaciones: item.observaciones || null,
-      fecha: item.fechaHallazgo || item.creadoEn,
+      fecha: item.fechaHallazgo,
+      disponibleEnCentralDesde: item.entregadoCentralEn,
       numeroTaxi: item.taxista?.vehiculo?.numeroTaxi || null,
       estado: item.estado,
     }));
 
-    if (q) {
-      resultado = resultado.filter((item) => {
-        const texto = [
-          item.descripcion,
-          item.observaciones,
-          item.numeroTaxi?.toString(),
-          item.estado?.toString(),
-          formatearTextoFecha(item.fecha),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return texto.includes(q);
-      });
-    }
-
     return res.json(resultado);
   } catch (error) {
-    console.error("Error /mobile/public/objetos-perdidos:", error);
+    console.error(
+      "Error GET /mobile/public/objetos-perdidos:",
+      error
+    );
+
     return res.status(500).json({
       error: "No se pudieron cargar los objetos perdidos",
-      detalle: error.message,
     });
   }
 });

@@ -93,15 +93,17 @@ function normalizarMatricula(matricula) {
   return `${match[1]} ${match[2]}`;
 }
 
-async function enviarCodigoSMS(telefono, codigo) {
-  if (!twilioClient) {
-    throw new Error("Twilio no configurado");
-  }
-
+async function enviarCodigoWhatsapp(telefono, codigo) {
   await twilioClient.messages.create({
-    body: `Tu código de verificación es: ${codigo}`,
-    from: twilioPhoneNumber,
-    to: telefono,
+    from: process.env.TWILIO_WHATSAPP_NUMBER,
+
+    to: `whatsapp:${telefono}`,
+
+    body:
+      `🚖 Taxi Ceuta\n\n` +
+      `Tu código de verificación es:\n\n` +
+      `*${codigo}*\n\n` +
+      `Caduca en 10 minutos.`,
   });
 }
 
@@ -205,7 +207,7 @@ router.post("/register", async (req, res) => {
       include: { vehiculo: true },
     });
 
-    await enviarCodigoSMS(telefonoNormalizado, codigo);
+    await enviarCodigoWhatsapp(telefonoNormalizado, codigo);
 
     return res.status(201).json({
       ok: true,
@@ -351,7 +353,7 @@ router.post("/resend-code", async (req, res) => {
       },
     });
 
-    await enviarCodigoSMS(telefonoNormalizado, codigo);
+    await enviarCodigoWhatsapp(telefonoNormalizado, codigo);
 
     return res.json({
       ok: true,
@@ -586,7 +588,7 @@ router.post("/forgot-password", async (req, res) => {
       },
     });
 
-    await enviarCodigoSMS(telefonoNormalizado, codigo);
+    await enviarCodigoWhatsapp(telefonoNormalizado, codigo);
 
     return res.json({
       ok: true,

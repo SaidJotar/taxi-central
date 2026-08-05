@@ -131,6 +131,47 @@ export default function ObjetosScreen() {
     );
   };
 
+  const entregarEnCentral = async (id) => {
+    Alert.alert(
+      "Entregar en central",
+      "Confirma que has entregado físicamente este objeto en la central.",
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Confirmar entrega",
+          onPress: async () => {
+            try {
+              if (!token) {
+                setError("No hay sesión activa.");
+                return;
+              }
+
+              setError("");
+
+              await api.entregarObjetoEnCentral(token, id);
+
+              /*
+               * Lo eliminamos inmediatamente de la lista local.
+               * El registro continúa existiendo en la base de datos.
+               */
+              setData((actual) =>
+                actual.filter((item) => item.id !== id)
+              );
+            } catch (e) {
+              setError(
+                e.message ||
+                "No se pudo registrar la entrega en la central."
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <AppScreen>
       <KeyboardAvoidingView
@@ -149,7 +190,7 @@ export default function ObjetosScreen() {
         >
           <SectionHeader
             title="Objetos perdidos"
-            subtitle="Registra y gestiona los objetos encontrados en el taxi"
+            subtitle="Gestiona los objetos encontrados en el taxi"
           />
 
           <AppCard style={styles.formCard}>
@@ -172,7 +213,7 @@ export default function ObjetosScreen() {
             />
 
             <AppButton
-              title={guardando ? "Guardando..." : "Guardar objeto"}
+              title={guardando ? "Guardando..." : "Registrar objeto"}
               onPress={guardarObjeto}
               variant="dark"
               disabled={guardando}
@@ -204,10 +245,6 @@ export default function ObjetosScreen() {
               <AppCard key={item.id} style={styles.itemCard}>
                 <View style={styles.itemTop}>
                   <Text style={styles.cardTitle}>{item.descripcion}</Text>
-                  <AppBadge
-                    label={item.estado || "Sin estado"}
-                    variant={getEstadoVariant(item.estado)}
-                  />
                 </View>
 
                 <View style={styles.metaRow}>
@@ -223,15 +260,13 @@ export default function ObjetosScreen() {
                 )}
 
                 <View style={styles.actionsRow}>
-                  {item.estado !== "entregado" && (
-                    <View style={styles.actionHalf}>
-                      <AppButton
-                        title="Entregado"
-                        onPress={() => marcarEntregado(item.id)}
-                        variant="success"
-                      />
-                    </View>
-                  )}
+                  <View style={styles.actionHalf}>
+                    <AppButton
+                      title="En central"
+                      onPress={() => entregarEnCentral(item.id)}
+                      variant="success"
+                    />
+                  </View>
 
                   <View style={styles.actionHalf}>
                     <AppButton

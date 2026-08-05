@@ -1,51 +1,87 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./index.css";
 
-const API_BASE_URL = "https://api.sjaceuta.es";
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000"
+).replace(/\/$/, "");
 
-// Cambia estos datos por los reales
-const TELEFONO_CENTRAL = "+34 956 00 00 00";
-const TELEFONO_CENTRAL_LIMPIO = "34956000000";
+// Sustituye estos datos por los definitivos
+const TELEFONO_CENTRAL = "+34 856 55 10 30";
+const TELEFONO_CENTRAL_HREF = "+34856551030";
+const TELEFONO_WHATSAPP = "+34856551030";
 const EMAIL_CONTACTO = "info@sjaceuta.es";
 
 export default function App() {
   const [objetos, setObjetos] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const cargarObjetos = async (texto = "") => {
+  const cargarObjetos = useCallback(async (texto = "", signal) => {
     try {
       setLoading(true);
       setError("");
 
-      const q = texto.trim()
-        ? `?q=${encodeURIComponent(texto.trim())}`
+      const textoLimpio = texto.trim();
+
+      const query = textoLimpio
+        ? `?q=${encodeURIComponent(textoLimpio)}`
         : "";
 
       const res = await fetch(
-        `${API_BASE_URL}/mobile/public/objetos-perdidos${q}`
+        `${API_BASE_URL}/mobile/public/objetos-perdidos${query}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+          signal,
+        }
       );
 
-      if (!res.ok) {
-        throw new Error("No se pudieron cargar los objetos perdidos.");
+      let data = null;
+
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
       }
 
-      const data = await res.json();
-      setObjetos(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setError(e.message || "Error cargando objetos.");
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (!res.ok) {
+        throw new Error(
+          data?.error || "No se pudieron cargar los objetos perdidos."
+        );
+      }
 
-  useEffect(() => {
-    cargarObjetos();
+      setObjetos(Array.isArray(data) ? data : []);
+      setBusquedaAplicada(textoLimpio);
+    } catch (e) {
+      if (e.name === "AbortError") {
+        return;
+      }
+
+      setObjetos([]);
+      setError(e.message || "No se pudieron cargar los objetos perdidos.");
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
+    }
   }, []);
 
-  const handleBuscar = (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    const controller = new AbortController();
+
+    cargarObjetos("", controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [cargarObjetos]);
+
+  const handleBuscar = (event) => {
+    event.preventDefault();
     cargarObjetos(busqueda);
   };
 
@@ -54,29 +90,31 @@ export default function App() {
     cargarObjetos("");
   };
 
+  const recargarObjetos = () => {
+    cargarObjetos(busquedaAplicada);
+  };
+
   return (
     <div className="page">
       <header className="topbar">
         <div className="container topbar-inner">
-          <div className="brand">
+          <a href="/" className="brand" aria-label="Inicio de Taxi Ceuta">
             <img
               src="/logo-taxi-ceuta.png"
-              alt="Taxi Ceuta"
+              alt=""
               className="brand-logo"
             />
+
             <div>
               <p className="brand-kicker">Servicio oficial</p>
-              <h1 className="brand-title">Taxi Ceuta</h1>
+              <p className="brand-title">Taxi Ceuta</p>
             </div>
-          </div>
+          </a>
 
           <div className="topbar-actions">
-            <a className="topbar-phone" href={`tel:${TELEFONO_CENTRAL}`}>
-              {TELEFONO_CENTRAL}
-            </a>
             <a
-              className="btn btn-primary"
-              href={`tel:${TELEFONO_CENTRAL}`}
+              className="btn btn-header"
+              href={`tel:${TELEFONO_CENTRAL_HREF}`}
             >
               Llamar ahora
             </a>
@@ -88,161 +126,186 @@ export default function App() {
         <section className="hero">
           <div className="hero-copy">
             <span className="hero-badge">Objetos perdidos</span>
-            <h2>Consulta si tu objeto ha sido encontrado en un taxi</h2>
+
+            <h1>Consulta si tu objeto está disponible en la central</h1>
+
             <p>
-              Esta página permite buscar de forma rápida los objetos
-              encontrados en los vehículos de Taxi Ceuta. Si localizas un
-              objeto que podría ser tuyo, ponte en contacto con la central para
-              verificarlo.
+              Aquí puedes buscar los objetos encontrados en los taxis que ya
+              han sido depositados en la central de Taxi Ceuta. Si reconoces
+              alguno, contacta con nosotros para verificar que te pertenece.
             </p>
 
             <div className="hero-cta">
-              <a className="btn btn-primary" href={`tel:${TELEFONO_CENTRAL}`}>
-                Llamar a central
-              </a>
-              <a className="btn btn-secondary" href={`mailto:${EMAIL_CONTACTO}`}>
-                Contactar por email
+              <a
+                className="btn btn-secondary"
+                href={`mailto:${EMAIL_CONTACTO}`}
+              >
+                Contactar por correo
               </a>
             </div>
           </div>
 
-          <div className="hero-card">
-            <div className="hero-card-icon">🛡️</div>
-            <h3>Canal oficial</h3>
+          <aside className="hero-card">
+            <div className="hero-card-icon" aria-hidden="true">
+              ✓
+            </div>
+
+            <h2>Objetos custodiados</h2>
+
             <p>
-              Consulta pública de objetos perdidos gestionada por la central de
-              Taxi Ceuta.
+              Los objetos mostrados en esta página ya se encuentran
+              físicamente en la central.
             </p>
 
             <div className="hero-contact-box">
               <span>Atención al cliente</span>
-              <strong>{TELEFONO_CENTRAL}</strong>
+
+              <a href={`tel:${TELEFONO_CENTRAL_HREF}`}>
+                {TELEFONO_CENTRAL}
+              </a>
             </div>
-          </div>
+          </aside>
         </section>
 
-        <section className="search-section">
+        <section className="search-section" aria-labelledby="buscar-titulo">
           <div className="section-head">
-            <h3>Buscar objeto</h3>
+            <h2 id="buscar-titulo">Buscar un objeto</h2>
+
             <p>
-              Busca por descripción, observaciones, número de taxi o estado.
+              Introduce una descripción como móvil, cartera, llaves,
+              mochila, gafas o documentación.
             </p>
           </div>
 
           <form className="search-box" onSubmit={handleBuscar}>
+            <label className="sr-only" htmlFor="busqueda-objeto">
+              Descripción del objeto
+            </label>
+
             <input
-              type="text"
-              placeholder="Ejemplo: mochila, móvil, gafas, cartera..."
+              id="busqueda-objeto"
+              type="search"
+              placeholder="Ejemplo: mochila negra, móvil, gafas..."
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={(event) => setBusqueda(event.target.value)}
+              autoComplete="off"
+              maxLength={100}
             />
-            <button type="submit" className="btn btn-primary">
-              Buscar
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading}
+            >
+              {loading ? "Buscando..." : "Buscar"}
             </button>
+
+            {(busqueda || busquedaAplicada) && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={limpiarBusqueda}
+                disabled={loading}
+              >
+                Limpiar
+              </button>
+            )}
+          </form>
+
+          <div className="results-bar" aria-live="polite">
+            {!loading && !error && (
+              <span>
+                {objetos.length}{" "}
+                {objetos.length === 1
+                  ? "objeto encontrado"
+                  : "objetos encontrados"}
+              </span>
+            )}
+
+            {busquedaAplicada && !loading && !error && (
+              <span>
+                Búsqueda: <strong>{busquedaAplicada}</strong>
+              </span>
+            )}
+          </div>
+        </section>
+
+        {loading && (
+          <div className="status-box" role="status">
+            <span className="loader" aria-hidden="true" />
+            <span>Cargando objetos perdidos...</span>
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="error-box" role="alert">
+            <div>
+              <strong>No se ha podido cargar el listado</strong>
+              <p>{error}</p>
+            </div>
+
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={limpiarBusqueda}
+              onClick={recargarObjetos}
             >
-              Limpiar
+              Volver a intentar
             </button>
-          </form>
-
-          <div className="results-bar">
-            <span>
-              {loading
-                ? "Buscando..."
-                : `${objetos.length} resultado${objetos.length === 1 ? "" : "s"}`}
-            </span>
           </div>
-        </section>
-
-        <section className="info-banner">
-          <div>
-            <h3>Información importante</h3>
-            <p>
-              Por privacidad, esta página no muestra datos personales de los
-              taxistas. Para recuperar un objeto, será necesario verificar la
-              información con la central.
-            </p>
-          </div>
-        </section>
-
-        {loading && <div className="status-box">Cargando objetos perdidos...</div>}
-
-        {error && !loading && <div className="error-box">{error}</div>}
+        )}
 
         {!loading && !error && objetos.length === 0 && (
           <div className="empty-box">
-            <h3>No hay resultados</h3>
-            <p>No se han encontrado objetos con esa búsqueda.</p>
+            <div className="empty-icon" aria-hidden="true">
+              ⌕
+            </div>
+
+            <h2>No hay resultados</h2>
+
+            <p>
+              No se han encontrado objetos disponibles en la central con esa
+              descripción. Prueba con una búsqueda más general.
+            </p>
           </div>
         )}
 
         {!loading && !error && objetos.length > 0 && (
-          <section className="cards-grid">
+          <section
+            className="cards-grid"
+            aria-label="Listado de objetos perdidos"
+          >
             {objetos.map((item) => (
-              <article className="object-card" key={item.id}>
-                <div className="object-card-top">
-                  <h3>{item.descripcion}</h3>
-                  <span className="status-chip">
-                    {capitalizar(item.estado)}
-                  </span>
-                </div>
-
-                {item.observaciones && (
-                  <p className="object-notes">{item.observaciones}</p>
-                )}
-
-                <div className="object-meta">
-                  <div className="meta-item">
-                    <span>Fecha</span>
-                    <strong>{formatearFecha(item.fecha)}</strong>
-                  </div>
-
-                  <div className="meta-item">
-                    <span>Taxi</span>
-                    <strong>{item.numeroTaxi || "-"}</strong>
-                  </div>
-                </div>
-
-                <div className="card-actions">
-                  <a
-                    className="btn btn-primary btn-full"
-                    href={`tel:${TELEFONO_CENTRAL}`}
-                  >
-                    Llamar para consultar
-                  </a>
-                </div>
-              </article>
+              <ObjetoCard key={item.id} item={item} />
             ))}
           </section>
         )}
 
         <section className="contact-panel">
           <div className="contact-copy">
-            <h3>¿Has encontrado tu objeto?</h3>
+            <span className="contact-kicker">Recuperación de objetos</span>
+
+            <h2>¿Crees que uno de estos objetos es tuyo?</h2>
+
             <p>
-              Llama a la central e indica la descripción del objeto, la fecha
-              aproximada del trayecto y, si aparece en el listado, el número de
-              taxi.
+              Contacta con la central e indica la descripción del objeto y la
+              fecha aproximada del trayecto. Tendrás que aportar información
+              que permita comprobar que eres su propietario.
             </p>
           </div>
 
           <div className="contact-actions">
-            <a className="btn btn-primary" href={`tel:${TELEFONO_CENTRAL}`}>
+            <a
+              className="btn btn-contact-primary"
+              href={`tel:${TELEFONO_CENTRAL_HREF}`}
+            >
               {TELEFONO_CENTRAL}
             </a>
-            <a className="btn btn-secondary" href={`mailto:${EMAIL_CONTACTO}`}>
-              {EMAIL_CONTACTO}
-            </a>
+
             <a
-              className="btn btn-whatsapp"
-              href={`https://wa.me/${TELEFONO_CENTRAL_LIMPIO}`}
-              target="_blank"
-              rel="noreferrer"
+              className="btn btn-contact-secondary"
+              href={`mailto:${EMAIL_CONTACTO}`}
             >
-              WhatsApp
+              Enviar correo
             </a>
           </div>
         </section>
@@ -252,29 +315,87 @@ export default function App() {
         <div className="container footer-inner">
           <div>
             <strong>Taxi Ceuta</strong>
-            <p>Servicio oficial de atención y gestión de objetos perdidos.</p>
+            <p>Servicio de gestión y custodia de objetos perdidos.</p>
           </div>
 
-          <div className="footer-links">
-            <a href={`tel:${TELEFONO_CENTRAL}`}>{TELEFONO_CENTRAL}</a>
-            <a href={`mailto:${EMAIL_CONTACTO}`}>{EMAIL_CONTACTO}</a>
-          </div>
+          <nav className="footer-links" aria-label="Enlaces de contacto">
+            <a href={`tel:${TELEFONO_CENTRAL_HREF}`}>
+              {TELEFONO_CENTRAL}
+            </a>
+
+            <a href={`mailto:${EMAIL_CONTACTO}`}>
+              {EMAIL_CONTACTO}
+            </a>
+          </nav>
         </div>
       </footer>
     </div>
   );
 }
 
-function formatearFecha(fecha) {
-  if (!fecha) return "No disponible";
+function ObjetoCard({ item }) {
+  return (
+    <article className="object-card">
+      <div className="object-card-top">
+        <div>
+          <span className="object-label">Objeto encontrado</span>
+          <h2>{item.descripcion || "Objeto sin descripción"}</h2>
+        </div>
 
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return fecha;
+        <span className="status-chip">
+          Disponible en central
+        </span>
+      </div>
 
-  return d.toLocaleString("es-ES");
+      {item.observaciones && (
+        <p className="object-notes">{item.observaciones}</p>
+      )}
+
+      <dl className="object-meta">
+        <div className="meta-item">
+          <dt>Fecha de hallazgo</dt>
+          <dd>{formatearFecha(item.fecha)}</dd>
+        </div>
+
+        {item.numeroTaxi && (
+          <div className="meta-item">
+            <dt>Número de taxi</dt>
+            <dd>Taxi {item.numeroTaxi}</dd>
+          </div>
+        )}
+      </dl>
+
+      <div className="card-notice">
+        La entrega se realizará únicamente después de comprobar la
+        titularidad del objeto.
+      </div>
+
+      <div className="card-actions">
+        <a
+          className="btn btn-primary btn-full"
+          href={`tel:${TELEFONO_CENTRAL_HREF}`}
+        >
+          Llamar para consultar
+        </a>
+      </div>
+    </article>
+  );
 }
 
-function capitalizar(texto) {
-  if (!texto) return "";
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
+function formatearFecha(fecha) {
+  if (!fecha) {
+    return "No disponible";
+  }
+
+  const date = new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) {
+    return "No disponible";
+  }
+
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(date);
 }

@@ -2,7 +2,11 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://2afe-79-116-220-101.ngrok-free.app",
+        "EXPO_PUBLIC_SOCKET_URL": "https://2afe-79-116-220-101.ngrok-free.app"
+      }
     },
     "preview": {
       "distribution": "internal",

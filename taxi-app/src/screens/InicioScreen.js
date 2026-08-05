@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -7,6 +7,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Modal,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +21,7 @@ import {
   startBackgroundLocationUpdates,
   stopBackgroundLocationUpdates,
 } from "../lib/backgroundLocation";
+import ChatTaxistaScreen from "../screens/ChatTaxistaScreen";
 
 export default function InicioScreen() {
   const { token, taxista, updateTaxista } = useAuth();
@@ -30,6 +33,8 @@ export default function InicioScreen() {
   const [conectado, setConectado] = useState(false);
   const [estado, setEstado] = useState(taxista?.estado || "desconectado");
   const { servicioActivo, setServicioActivo } = useOferta();
+
+  const servicioActivoRef = useRef(servicioActivo);
 
   const socket = useMemo(() => getSocket(token), [token]);
 
@@ -44,6 +49,12 @@ export default function InicioScreen() {
   const [accionPendiente, setAccionPendiente] = useState("");
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [taxisDisponibles, setTaxisDisponibles] = useState(null);
+
+  const [mostrarCerrarServicio, setMostrarCerrarServicio] = useState(false);
+  const [costoFinalInput, setCostoFinalInput] = useState("");
+  const [guardandoCierre, setGuardandoCierre] = useState(false);
+
+  const [mostrarChatServicio, setMostrarChatServicio] = useState(false);
 
   const gpsDebeEstarActivo = estado !== "desconectado";
 
@@ -93,9 +104,43 @@ export default function InicioScreen() {
     return () => clearInterval(intervalo);
   }, [cargarTaxisDisponibles]);
 
+  const cargarPosicionEnCola = useCallback(() => {
+    socket.emit("taxista:posicion_en_cola", null, (respuesta) => {
+      if (respuesta?.posicion != null) {
+        setPosicionEnParada(respuesta.posicion);
+      } else {
+        setPosicionEnParada(null);
+      }
+    });
+  }, [socket]);
+
+  useEffect(() => {
+    cargarPosicionEnCola();
+    const intervalo = setInterval(cargarPosicionEnCola, 10000);
+
+    return () => clearInterval(intervalo);
+  }, [cargarPosicionEnCola]);
+
+
   useEffect(() => {
     setConectado(!!socket?.connected);
   }, [socket]);
+
+  useEffect(() => {
+    servicioActivoRef.current = servicioActivo;
+  }, [servicioActivo]);
+
+  useEffect(() => {
+    if (!servicioActivo) return;
+
+    setParadaEntrando(null);
+    setParadaSaliendo(null);
+    setSegundosEntradaParada(0);
+
+    setParadaActual(null);
+    setColaParada([]);
+    setPosicionEnParada(null);
+  }, [servicioActivo]);
 
   useEffect(() => {
     if (!paradaActual) {
@@ -178,7 +223,22 @@ export default function InicioScreen() {
     });
 
     socket.on("servicio:terminado_ok", async (data) => {
+      console.log("✅ Servicio finalizado");
+
+      setMostrarCerrarServicio(false);
+      setCostoFinalInput("");
+      setGuardandoCierre(false);
+      setMostrarChatServicio(false);
+
+      servicioActivoRef.current = null;
       setServicioActivo(null);
+
+      setParadaActual(null);
+      setParadaEntrando(null);
+      setParadaSaliendo(null);
+      setSegundosEntradaParada(0);
+      setColaParada([]);
+      setPosicionEnParada(null);
 
       if (data?.taxista) {
         await updateTaxista(data.taxista);
@@ -186,10 +246,33 @@ export default function InicioScreen() {
       } else {
         setEstado("disponible");
       }
+
+      const ubicacion = await refrescarUbicacion();
+
+      console.log(
+        "📍 Ubicación recargada tras finalizar:",
+        ubicacion
+      );
+
+      cargarPosicionEnCola();
+      cargarTaxisDisponibles();
     });
+
 
     socket.on("taxista:parada_sugerida", (data) => {
       console.log("📥 taxista:parada_sugerida", data);
+
+      if (servicioActivoRef.current) {
+        console.log(
+          "🚫 Sugerencia de parada ignorada porque existe un servicio activo"
+        );
+
+        setParadaEntrando(null);
+        setParadaSaliendo(null);
+        setSegundosEntradaParada(0);
+        return;
+      }
+
       setParadaSaliendo(null);
       setParadaEntrando(data);
     });
@@ -202,8 +285,16 @@ export default function InicioScreen() {
 
     socket.on("taxista:parada_confirmada", async (data) => {
       console.log("📥 taxista:parada_confirmada", data);
+
       setParadaEntrando(null);
       setSegundosEntradaParada(0);
+
+      if (servicioActivoRef.current) {
+        console.log(
+          "🚫 Confirmación de parada ignorada durante el servicio"
+        );
+        return;
+      }
 
       if (data?.taxista) {
         await updateTaxista(data.taxista);
@@ -252,6 +343,7 @@ export default function InicioScreen() {
     socket.on("error:general", (data) => {
       console.log("❌ error:general", data);
       setCambiandoEstado(false);
+      setGuardandoCierre(false);
     });
 
     socket.on("taxista:gps_requerido", (data) => {
@@ -348,15 +440,40 @@ export default function InicioScreen() {
     }
   };
 
-  const terminarServicio = () => {
+  const abrirCerrarServicio = () => {
     if (!servicioActivo?.solicitudId) return;
+    setCostoFinalInput("");
+    setMostrarCerrarServicio(true);
+  };
+
+  const confirmarCerrarServicio = () => {
+    if (!servicioActivo?.solicitudId) return;
+
+    const costo = Number(String(costoFinalInput).replace(",", "."));
+
+    if (!Number.isFinite(costo) || costo < 0) {
+      return;
+    }
+
+    setGuardandoCierre(true);
 
     socket.emit("servicio:terminar", {
       solicitudId: servicioActivo.solicitudId,
+      costoFinal: costo,
     });
   };
 
   const numeroTaxi = taxista?.vehiculo?.numeroTaxi || null;
+
+  if (mostrarChatServicio && servicioActivo?.solicitudId) {
+    return (
+      <ChatTaxistaScreen
+        solicitudId={servicioActivo.solicitudId}
+        clienteNombre={servicioActivo.nombreCliente || "Cliente"}
+        onClose={() => setMostrarChatServicio(false)}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.appShell} edges={["bottom"]}>
@@ -379,22 +496,12 @@ export default function InicioScreen() {
             </View>
 
             <View style={styles.onlineBadge}>
-              <Text style={styles.onlineLabel}>Taxis en línea</Text>
+              <Text style={styles.onlineLabel}>Taxis Disponibles</Text>
               <Text style={styles.onlineValue}>
                 {taxisDisponibles !== null ? taxisDisponibles : "..."}
               </Text>
             </View>
           </View>
-
-          <Text style={styles.headerHelper}>
-            {servicioActivo
-              ? "Tienes un servicio en curso"
-              : paradaActual
-                ? `En parada ${paradaActual.nombre}`
-                : estado === "disponible"
-                  ? "Listo para recibir servicios"
-                  : "Actualmente fuera de servicio"}
-          </Text>
 
           <View style={styles.infoOperativa}>
             {servicioActivo ? (
@@ -430,12 +537,14 @@ export default function InicioScreen() {
             <Text style={styles.infoExtra}>{accionPendiente}</Text>
           )}
 
-          {paradaEntrando?.parada && (
+          {!servicioActivo && paradaEntrando?.parada && (
             <View style={styles.noticeCard}>
               <Text style={styles.noticeTitle}>Entrando en parada</Text>
+
               <Text style={styles.noticeText}>
                 {paradaEntrando.parada.nombre}
               </Text>
+
               <Text style={styles.noticeSubtext}>
                 Te posicionarás automáticamente en {segundosEntradaParada}s
               </Text>
@@ -519,13 +628,6 @@ export default function InicioScreen() {
               </View>
 
               <View style={styles.servicioItem}>
-                <Text style={styles.servicioLabel}>Cliente</Text>
-                <Text style={styles.servicioValue}>
-                  {servicioActivo.nombreCliente || "-"}
-                </Text>
-              </View>
-
-              <View style={styles.servicioItem}>
                 <Text style={styles.servicioLabel}>Teléfono</Text>
                 <Text style={styles.servicioValue}>
                   {servicioActivo.telefonoCliente || "-"}
@@ -552,14 +654,74 @@ export default function InicioScreen() {
 
               <TouchableOpacity
                 style={styles.finishButton}
-                onPress={terminarServicio}
+                onPress={abrirCerrarServicio}
               >
                 <Text style={styles.finishButtonText}>Finalizar servicio</Text>
               </TouchableOpacity>
             </View>
           )}
+          {/*
+          {servicioActivo && (
+            <TouchableOpacity
+              style={styles.chatButton}
+              onPress={() => setMostrarChatServicio(true)}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111827" />
+              <Text style={styles.chatButtonText}>Mensaje</Text>
+            </TouchableOpacity>
+          )}
+          */}
         </View>
       </ScrollView>
+      <Modal
+        visible={mostrarCerrarServicio}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Finalizar servicio</Text>
+            <Text style={styles.modalSubtitle}>
+              Introduce el coste final antes de cerrar el viaje.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej. 8.50"
+              keyboardType="decimal-pad"
+              value={costoFinalInput}
+              onChangeText={setCostoFinalInput}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalSecondaryButton}
+                onPress={() => {
+                  if (guardandoCierre) return;
+                  setMostrarCerrarServicio(false);
+                  setCostoFinalInput("");
+                }}
+              >
+                <Text style={styles.modalSecondaryText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalPrimaryButton,
+                  guardandoCierre && { opacity: 0.7 },
+                ]}
+                onPress={confirmarCerrarServicio}
+                disabled={guardandoCierre}
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {guardandoCierre ? "Guardando..." : "Finalizar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -882,5 +1044,89 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748b",
+  },
+  modalInput: {
+    marginTop: 16,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: "#0f172a",
+    backgroundColor: "#f8fafc",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 18,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSecondaryText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalPrimaryText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  chatButton: {
+    marginTop: 12,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  chatButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+  },
 });

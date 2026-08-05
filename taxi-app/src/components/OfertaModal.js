@@ -87,12 +87,6 @@ export default function OfertaModal({ oferta, visible, onAceptar, onRechazar }) 
           </Text>
 
           <View style={styles.infoGrid}>
-            <View style={styles.infoBox}>
-              <Text style={styles.label}>Cliente</Text>
-              <Text style={styles.value}>
-                {oferta?.solicitud?.nombreCliente || "-"}
-              </Text>
-            </View>
 
             <View style={styles.infoBox}>
               <Text style={styles.label}>Teléfono</Text>

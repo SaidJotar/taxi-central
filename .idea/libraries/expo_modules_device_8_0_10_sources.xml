@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="expo.modules.device-8.0.10-sources">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/taxi-app/node_modules/expo-device/local-maven-repo/host/exp/exponent/expo.modules.device/8.0.10/expo.modules.device-8.0.10-sources.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

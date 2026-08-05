@@ -437,7 +437,7 @@ export default function LoginScreen() {
                       <Text style={styles.linkButtonText}>He olvidado mi contraseña</Text>
                     </TouchableOpacity>
                   )}
-
+{/*
                   <TouchableOpacity
                     style={styles.linkButton}
                     onPress={() => {
@@ -453,6 +453,7 @@ export default function LoginScreen() {
                         : "Ya tengo cuenta, iniciar sesión"}
                     </Text>
                   </TouchableOpacity>
+*/}                  
                 </>
               )}
             </View>
