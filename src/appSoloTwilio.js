@@ -24,6 +24,7 @@ const allowedOrigins = [
   "http://127.0.0.1:8081",
   "https://sjaceuta.es",
   "https://www.sjaceuta.es",
+  "https://dev-api.sjaceuta.es",
   "https://api.sjaceuta.es",
   "https://taxista.sjaceuta.es",
   "https://objetos.sjaceuta.es",
