@@ -6,8 +6,16 @@ const {
 const { geocodificarDireccion } = require("./geocodingService");
 const { buscarParadaMasCercana } = require("./paradasService");
 
-function separarDireccionReferencia(texto = "") {
-  let limpio = texto.trim();
+function separarDireccionReferencia(
+  texto = ""
+) {
+  let limpio = texto
+    .trim()
+    .replace(
+      /^(en la|en el|en los|en las|en|por|sobre)\s+/i,
+      ""
+    )
+    .trim();
 
   if (!limpio) {
     return {
@@ -16,50 +24,54 @@ function separarDireccionReferencia(texto = "") {
     };
   }
 
-  limpio = limpio
-    .replace(/^(en la|en el|en los|en las)\s+/i, "")
-    .replace(/^(en|por|sobre)\s+/i, "")
-    .trim();
+  const patronReferencia =
+    /\s+(frente\s+a|al\s+lado\s+de|junto\s+a|cerca\s+de|detr[aá]s\s+de|en\s+la\s+puerta\s+de|en\s+la\s+puerta\s+del|en\s+la\s+entrada\s+de|en\s+la\s+entrada\s+del|esquina\s+con)\s+(.+)$/i;
 
-  const lower = limpio.toLowerCase();
+  const coincidencia =
+    limpio.match(patronReferencia);
 
-  const separadores = [
-    " donde ",
-    " frente a ",
-    " al lado de ",
-    " junto a ",
-    " cerca de ",
-    " detrás de ",
-    " detras de ",
-    " por ",
-    " en la puerta de ",
-    " en la puerta del ",
-    " en la entrada de ",
-    " en la entrada del ",
-  ];
-
-  for (const sep of separadores) {
-    const idx = lower.indexOf(sep);
-
-    if (idx !== -1) {
-      const base = limpio.substring(0, idx).trim();
-      const ref = limpio.substring(idx + sep.length).trim();
-
-      return {
-        direccionBase: base || limpio,
-        referenciaRecogida: ref || null,
-      };
-    }
+  if (!coincidencia) {
+    return {
+      direccionBase: limpio,
+      referenciaRecogida: null,
+    };
   }
 
+  const indice =
+    coincidencia.index ?? limpio.length;
+
+  const direccionBase = limpio
+    .slice(0, indice)
+    .trim();
+
+  const referenciaRecogida =
+    `${coincidencia[1]} ${coincidencia[2]}`
+      .trim();
+
   return {
-    direccionBase: limpio,
-    referenciaRecogida: null,
+    direccionBase:
+      direccionBase || limpio,
+    referenciaRecogida:
+      referenciaRecogida || null,
   };
 }
 
 async function crearSolicitudTaxi(estadoLlamada) {
-  let geo = null;
+  let geo =
+    estadoLlamada.lat != null &&
+      estadoLlamada.lng != null
+      ? {
+        lat: Number(estadoLlamada.lat),
+        lng: Number(estadoLlamada.lng),
+        direccionFormateada:
+          estadoLlamada.direccion ||
+          estadoLlamada.direccionBase ||
+          null,
+        placeId:
+          estadoLlamada.placeId || null,
+      }
+      : null;
+
   let paradaSugerida = null;
 
   const textoOriginal =
@@ -88,29 +100,69 @@ async function crearSolicitudTaxi(estadoLlamada) {
   console.log("📌 Referencia:", referenciaRecogida);
 
   try {
-    if (textoParaGeocodificar) {
-      geo = await geocodificarDireccion(textoParaGeocodificar);
+    // Respaldo solamente si la herramienta no proporcionó
+    // las coordenadas por algún error o por compatibilidad
+    // con llamadas antiguas.
+    if (
+      (!geo ||
+        geo.lat == null ||
+        geo.lng == null) &&
+      textoParaGeocodificar
+    ) {
+      const resultadoGeo =
+        await geocodificarDireccion(
+          textoParaGeocodificar
+        );
+
+      if (resultadoGeo?.encontrada) {
+        geo = resultadoGeo;
+      }
     }
 
-    if (geo?.lat != null && geo?.lng != null) {
-      paradaSugerida = await buscarParadaMasCercana(geo.lat, geo.lng);
+    if (
+      geo?.lat != null &&
+      geo?.lng != null
+    ) {
+      paradaSugerida =
+        await buscarParadaMasCercana(
+          geo.lat,
+          geo.lng
+        );
     }
 
-    console.log("🌍 Resultado geocodificación:", geo);
-    console.log("🅿️ Parada sugerida:", paradaSugerida);
-
+    console.log(
+      "🌍 Ubicación definitiva:",
+      geo
+    );
+    console.log(
+      "🅿️ Parada sugerida:",
+      paradaSugerida
+    );
   } catch (error) {
-    console.error("❌ Error preparando solicitud:", error.message);
+    console.error(
+      "❌ Error preparando solicitud:",
+      error.message
+    );
   }
+
+  const direccionNormalizada =
+    estadoLlamada.direccion ||
+    estadoLlamada.direccionBase ||
+    geo?.direccionFormateada ||
+    textoOriginal ||
+    textoParaGeocodificar ||
+    "Ubicación no indicada";
 
   const solicitud = await prisma.solicitudViaje.create({
     data: {
       nombreCliente: estadoLlamada.nombre || "Cliente",
       telefonoCliente: estadoLlamada.telefono,
-      direccionRecogida:
-        textoOriginal || textoParaGeocodificar || "Ubicación no indicada",
-      direccionBase: direccionBase || null,
-      referenciaRecogida: referenciaRecogida || null,
+      direccionRecogida: direccionNormalizada,
+      direccionBase:
+        estadoLlamada.direccionBase ||
+        direccionNormalizada,
+      referenciaRecogida:
+        referenciaRecogida || null,
       latRecogida: geo?.lat ?? null,
       lngRecogida: geo?.lng ?? null,
       paradaSugeridaId: paradaSugerida?.id ?? null,

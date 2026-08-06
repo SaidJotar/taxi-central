@@ -22,5 +22,8 @@
         "EXPO_PUBLIC_SOCKET_URL": "https://api.sjaceuta.es"
       }
     }
+  },
+  "cli": {
+    "appVersionSource": "remote"
   }
 }
