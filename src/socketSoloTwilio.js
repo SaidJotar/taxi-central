@@ -992,6 +992,103 @@ function iniciarSocket(server) {
       }
     });
 
+    socket.on("servicio:cliente_no_localizado", async ({ solicitudId }) => {
+      try {
+        const taxistaId = socket.taxistaAuth?.taxistaId;
+
+        if (!solicitudId || !taxistaId) {
+          socket.emit("error:general", {
+            message: "Faltan datos del servicio",
+          });
+          return;
+        }
+
+        const solicitud = await prisma.solicitudViaje.findUnique({
+          where: { id: solicitudId },
+          include: {
+            asignacion: true,
+          },
+        });
+
+        if (!solicitud) {
+          socket.emit("error:general", {
+            message: "Solicitud no encontrada",
+          });
+          return;
+        }
+
+        // Solo el taxista asignado puede cancelar por cliente no localizado
+        if (
+          !solicitud.asignacion ||
+          solicitud.asignacion.taxistaId !== taxistaId
+        ) {
+          socket.emit("error:general", {
+            message: "No autorizado para cancelar este servicio",
+          });
+          return;
+        }
+
+        // Solo una solicitud actualmente asignada puede cerrarse así
+        if (solicitud.estado !== "asignada") {
+          socket.emit("error:general", {
+            message: "El servicio ya no está activo",
+          });
+          return;
+        }
+
+        await prisma.solicitudViaje.update({
+          where: { id: solicitudId },
+          data: {
+            estado: "cancelada",
+          },
+        });
+
+        await prisma.taxista.update({
+          where: { id: taxistaId },
+          data: {
+            estado: "disponible",
+            paradaId: null,
+            enParadaDesde: null,
+          },
+        });
+
+        limpiarSugerenciaParada(taxistaId);
+        limpiarTimerAutoEntrada(taxistaId);
+
+        const taxistaActualizado = await prisma.taxista.findUnique({
+          where: { id: taxistaId },
+          include: {
+            vehiculo: true,
+            parada: true,
+          },
+        });
+
+        console.log("🚫 Cliente no localizado:", {
+          solicitudId,
+          taxistaId,
+        });
+
+        socket.emit("servicio:cliente_no_localizado_ok", {
+          ok: true,
+          solicitudId,
+          taxista: taxistaActualizado,
+        });
+
+        // Ya está disponible, así que puede recibir otra solicitud
+        await intentarOfertarSolicitudPendienteATaxista(taxistaId);
+
+      } catch (error) {
+        console.error(
+          "Error servicio:cliente_no_localizado:",
+          error.message
+        );
+
+        socket.emit("error:general", {
+          message: error.message,
+        });
+      }
+    });
+
     socket.on("servicio:terminar", async ({ solicitudId, costoFinal }) => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;

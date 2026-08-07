@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  Alert,
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -258,6 +259,47 @@ export default function InicioScreen() {
       cargarTaxisDisponibles();
     });
 
+    socket.on("servicio:cliente_no_localizado_ok", async (data) => {
+      console.log("🚫 Cliente no localizado confirmado", data);
+
+      // Cerramos cualquier modal/chat que estuviera abierto
+      setMostrarCerrarServicio(false);
+      setCostoFinalInput("");
+      setGuardandoCierre(false);
+      setMostrarChatServicio(false);
+
+      // Muy importante:
+      // eliminamos el servicio activo de la app
+      servicioActivoRef.current = null;
+      setServicioActivo(null);
+
+      // Limpiamos estado visual de parada
+      setParadaActual(null);
+      setParadaEntrando(null);
+      setParadaSaliendo(null);
+      setSegundosEntradaParada(0);
+      setColaParada([]);
+      setPosicionEnParada(null);
+
+      // El backend ya devuelve el taxista actualizado como disponible
+      if (data?.taxista) {
+        await updateTaxista(data.taxista);
+        setEstado(data.taxista.estado || "disponible");
+      } else {
+        setEstado("disponible");
+      }
+
+      // Refrescamos GPS porque vuelve a estar disponible
+      const ubicacion = await refrescarUbicacion();
+
+      console.log(
+        "📍 Ubicación recargada tras cliente no localizado:",
+        ubicacion
+      );
+
+      cargarPosicionEnCola();
+      cargarTaxisDisponibles();
+    });
 
     socket.on("taxista:parada_sugerida", (data) => {
       console.log("📥 taxista:parada_sugerida", data);
@@ -359,6 +401,7 @@ export default function InicioScreen() {
       socket.off("taxista:estado_actualizado");
       socket.off("parada:cola_actualizada");
       socket.off("servicio:terminado_ok");
+      socket.off("servicio:cliente_no_localizado_ok");
       socket.off("taxista:parada_sugerida");
       socket.off("taxista:parada_sugerida_cancelada");
       socket.off("taxista:parada_confirmada");
@@ -461,6 +504,30 @@ export default function InicioScreen() {
       solicitudId: servicioActivo.solicitudId,
       costoFinal: costo,
     });
+  };
+
+  const clienteNoLocalizado = () => {
+    if (!servicioActivo?.solicitudId) return;
+
+    Alert.alert(
+      "Cliente no localizado",
+      "¿Confirmas que no has podido localizar al cliente?",
+      [
+        {
+          text: "Volver",
+          style: "cancel",
+        },
+        {
+          text: "Confirmar",
+          style: "destructive",
+          onPress: () => {
+            socket.emit("servicio:cliente_no_localizado", {
+              solicitudId: servicioActivo.solicitudId,
+            });
+          },
+        },
+      ]
+    );
   };
 
   const numeroTaxi = taxista?.vehiculo?.numeroTaxi || null;
@@ -651,6 +718,21 @@ export default function InicioScreen() {
                   </Text>
                 </View>
               )}
+
+              <TouchableOpacity
+                style={styles.clienteNoLocalizadoButton}
+                onPress={clienteNoLocalizado}
+              >
+                <Ionicons
+                  name="person-remove-outline"
+                  size={20}
+                  color="#b91c1c"
+                />
+
+                <Text style={styles.clienteNoLocalizadoText}>
+                  Cliente no localizado
+                </Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.finishButton}
@@ -1128,5 +1210,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#111827",
+  },
+  clienteNoLocalizadoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fef2f2",
+    marginTop: 14,
+    marginBottom: 10,
+  },
+
+  clienteNoLocalizadoText: {
+    color: "#b91c1c",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
