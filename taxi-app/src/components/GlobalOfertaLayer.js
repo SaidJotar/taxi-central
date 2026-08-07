@@ -86,7 +86,6 @@ export default function GlobalOfertaLayer() {
 
         if (montadoRef.current) {
           setAudioConfigurado(true);
-          console.log("✅ Sistema de audio preparado");
         }
       } catch (error) {
         console.log(
@@ -132,7 +131,6 @@ export default function GlobalOfertaLayer() {
       sonidoOferta.pause();
       await sonidoOferta.seekTo(0);
 
-      console.log("⏹️ Sonido de oferta detenido");
     } catch (error) {
       console.log(
         "❌ Error deteniendo sonido:",
@@ -190,11 +188,6 @@ export default function GlobalOfertaLayer() {
       try {
         ofertaSonandoRef.current = ofertaId;
 
-        console.log(
-          "▶️ Preparando sonido para oferta:",
-          ofertaId
-        );
-
         await setIsAudioActiveAsync(true);
 
         /*
@@ -205,9 +198,6 @@ export default function GlobalOfertaLayer() {
             operacionAudioRef.current ||
           !montadoRef.current
         ) {
-          console.log(
-            "🚫 Reproducción cancelada antes de configurar"
-          );
           return;
         }
 
@@ -225,9 +215,6 @@ export default function GlobalOfertaLayer() {
             operacionAudioRef.current ||
           !montadoRef.current
         ) {
-          console.log(
-            "🚫 Reproducción cancelada antes de play()"
-          );
           return;
         }
 
@@ -243,10 +230,6 @@ export default function GlobalOfertaLayer() {
 
         sonidoOferta.play();
 
-        console.log(
-          "🔊 Sonido iniciado para oferta:",
-          ofertaId
-        );
       } catch (error) {
         if (
           numeroOperacion ===
@@ -255,10 +238,6 @@ export default function GlobalOfertaLayer() {
           ofertaSonandoRef.current = null;
         }
 
-        console.log(
-          "❌ Error iniciando sonido:",
-          error?.message || error
-        );
       }
     };
 

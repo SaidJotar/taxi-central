@@ -232,50 +232,11 @@ function registerIncomingCallRoute(app, llamadas) {
             }
         });
     });
-    /*
-        app.post("/incoming-call/nombre", (req, res) => {
-            const body = normalizarSiNoHayBody(req);
-            const callSid = body.CallSid;
-            const speech = (body.SpeechResult || "").trim();
     
-            console.log("SpeechResult nombre:", speech);
-    
-            const llamada = llamadas.get(callSid);
-            if (!llamada) {
-                const response = new twilio.twiml.VoiceResponse();
-                response.say(decir(), "No he podido recuperar la llamada. Inténtalo de nuevo.");
-                response.hangup();
-                res.type("text/xml");
-                return res.send(response.toString());
-            }
-    
-            if (!speech) {
-                const response = respuestaGather({
-                    texto: "No he entendido tu nombre. Por favor, repítelo despacio.",
-                    action: "/incoming-call/nombre",
-                });
-                res.type("text/xml");
-                return res.send(response.toString());
-            }
-    
-            llamada.nombre = speech;
-            llamadas.set(callSid, llamada);
-    
-            const response = respuestaGather({
-                texto: `Gracias ${speech}. ¿Dónde te gustaría que te recogiera?`,
-                action: "/incoming-call/direccion",
-            });
-    
-            res.type("text/xml");
-            res.send(response.toString());
-        });
-    */
     app.post("/incoming-call/direccion", (req, res) => {
         const body = req.body || {};
         const callSid = body.CallSid;
         const speech = limpiarTextoUbicacion(body.SpeechResult || "");
-
-        console.log("SpeechResult direccion:", speech);
 
         const llamada = llamadas.get(callSid);
         const response = new twilio.twiml.VoiceResponse();

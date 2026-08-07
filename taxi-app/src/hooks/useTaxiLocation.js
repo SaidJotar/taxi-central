@@ -152,7 +152,6 @@ export default function useTaxiLocation({
             setGpsInicializando(false);
 
             socket.emit("taxista:ubicacion", { lat, lng });
-            console.log("📍 watch ubicación:", { lat, lng, at: new Date().toISOString() });
           }
         );
 

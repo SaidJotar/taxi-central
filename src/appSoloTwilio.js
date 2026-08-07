@@ -4,7 +4,6 @@ const cors = require("cors");
 const crypto = require("crypto");
 
 const { port } = require("./configSoloTwilio");
-const { registerIncomingCallRoute } = require("./routes/incomingCallSoloTwilio");
 const { leerJsonArray } = require("./services/storageService");
 const prisma = require("./services/bd");
 const { iniciarSocket } = require("./socketSoloTwilio");
@@ -167,29 +166,6 @@ app.post("/retell/webhook", retellRawJson, (req, res) => {
 
     const { event, call } = obtenerBodyRetell(req);
 
-    console.log("📞 Evento Retell:", event);
-    console.log("📞 Call ID:", call?.call_id);
-    console.log("📞 Teléfono:", call?.from_number);
-
-    switch (event) {
-      case "call_started":
-        console.log("✅ Llamada Retell iniciada");
-        break;
-
-      case "call_ended":
-        console.log("📴 Llamada Retell terminada");
-        console.log("Motivo:", call?.disconnection_reason);
-        break;
-
-      case "call_analyzed":
-        console.log("📝 Llamada analizada");
-        console.log("Transcripción:", call?.transcript);
-        break;
-
-      default:
-        console.log("ℹ️ Evento Retell no gestionado:", event);
-    }
-
     return res.sendStatus(204);
   } catch (error) {
     console.error("❌ Error procesando webhook Retell:", error);
@@ -251,7 +227,6 @@ app.post(
         ];
 
         for (const variante of variantes) {
-          console.log("🔎 Probando geocodificación:", variante);
 
           const geo = await geocodificarDireccion(variante);
 
@@ -489,12 +464,6 @@ async function intentarLanzarOfertaRetell(solicitudViajeId) {
     taxista,
   });
 
-  console.log("✅ Oferta enviada desde Retell:", {
-    solicitudId: solicitudViajeId,
-    ofertaId: oferta.id,
-    taxistaId: taxista.id,
-  });
-
   return {
     lanzada: true,
     ofertaId: oferta.id,
@@ -514,14 +483,6 @@ async function esperarResultadoSolicitudRetell(
       await obtenerOfertaAceptada(solicitudViajeId);
 
     if (ofertaAceptada) {
-      console.log("✅ Taxista aceptado para Retell:", {
-        solicitudId: solicitudViajeId,
-        ofertaId: ofertaAceptada.id,
-        taxistaId: ofertaAceptada.taxistaId,
-        numeroTaxi:
-          ofertaAceptada.taxista?.vehiculo?.numeroTaxi || null,
-      });
-
       return construirResultadoAceptado(
         solicitudViajeId,
         ofertaAceptada
@@ -588,11 +549,6 @@ async function esperarResultadoSolicitudRetell(
 
       const resultadoLanzamiento =
         await intentarLanzarOfertaRetell(solicitudViajeId);
-
-      console.log("🔁 Reintento de oferta Retell:", {
-        solicitudId: solicitudViajeId,
-        ...resultadoLanzamiento,
-      });
     }
 
     await esperar(INTERVALO_COMPROBACION_RETELL_MS);
@@ -661,9 +617,6 @@ app.post(
       const args = body.args || body;
       const call = body.call || {};
 
-      console.log("===== RETELL CALL =====");
-      console.log(JSON.stringify(call, null, 2));
-
       /*
        * El teléfono se obtiene exclusivamente del número
        * desde el que se realiza la llamada.
@@ -687,16 +640,6 @@ app.post(
         telefonoOrigen ||
         telefonoPrueba ||
         null;
-
-      console.log("📞 Teléfono automático de Retell:", {
-        callId: call.call_id || null,
-        callType: call.call_type || null,
-        esPruebaRetell,
-        fromNumberOriginal: call.from_number || null,
-        telefonoOrigen,
-        telefonoPrueba,
-        telefonoGuardado: telefonoCliente,
-      });
 
       const nombreCliente =
         String(args.nombreCliente || "").trim() ||
@@ -729,17 +672,6 @@ app.post(
           args.lng !== ""
           ? Number(args.lng)
           : null;
-
-      console.log("🚕 Retell solicita taxi:", {
-        telefonoCliente,
-        nombreCliente,
-        direccionRecogida,
-        direccionBase,
-        referenciaRecogida,
-        latRecogida,
-        lngRecogida,
-        callId: call.call_id,
-      });
 
       if (!direccionRecogida) {
         return res.status(200).json({
@@ -835,11 +767,6 @@ app.post(
 
       if (solicitud) {
         duplicada = true;
-
-        console.log(
-          "⚠️ Solicitud Retell duplicada evitada:",
-          solicitud.id
-        );
       } else {
         solicitud =
           await prisma.solicitudViaje.create({
@@ -864,11 +791,6 @@ app.post(
               confirmadaEn: new Date(),
             },
           });
-
-        console.log(
-          "✅ Solicitud Retell creada:",
-          solicitud.id
-        );
       }
 
       /*
@@ -877,12 +799,6 @@ app.post(
        */
       const lanzamientoInicial =
         await intentarLanzarOfertaRetell(solicitud.id);
-
-      console.log("🚕 Lanzamiento inicial Retell:", {
-        solicitudId: solicitud.id,
-        duplicada,
-        ...lanzamientoInicial,
-      });
 
       /*
        * Esta espera mantiene abierta la función de Retell
@@ -1226,13 +1142,6 @@ app.post(
         .filter(Boolean)
         .join(" ");
 
-      console.log("🔎 Consulta de objeto perdido desde Retell:", {
-        descripcion,
-        fechaAproximada,
-        datosAdicionales,
-        callId: body.call?.call_id || null,
-      });
-
       if (!descripcion) {
         return res.status(200).json({
           ok: false,
@@ -1358,17 +1267,6 @@ app.post(
           );
         });
 
-      console.log("🔎 Resultado objetos perdidos:", {
-        encontradosEnPrisma: objetos.length,
-        coincidenciasValidas: objetosPuntuados.length,
-        puntuaciones: objetosPuntuados.map(
-          ({ objeto, puntuacion }) => ({
-            objetoId: objeto.id,
-            puntuacion,
-          })
-        ),
-      });
-
       if (objetosPuntuados.length === 0) {
         return res.status(200).json({
           ok: true,
@@ -1482,89 +1380,6 @@ app.get("/taxistas", async (req, res) => {
 
 const { buscarSiguienteTaxistaDisponible, emitirOfertaATaxista } = require("./services/ofertasServiceSoloTwilio");
 
-app.all("/debug-status", (req, res) => {
-  console.log("🔥🔥🔥 ENTRÓ /debug-status");
-  console.log("BODY:", req.body);
-  console.log("QUERY:", req.query);
-  res.status(200).send("debug-status-ok");
-});
-
-app.post("/test/oferta-real", async (req, res) => {
-  try {
-    const {
-      nombreCliente = "Cliente Test",
-      telefonoCliente = "+34600000000",
-      direccionRecogida = "Gran Vía 25",
-      direccionBase = null,
-      referenciaRecogida = null,
-    } = req.body || {};
-
-    const textoParaGeo = direccionBase || direccionRecogida;
-
-    let geo = null;
-    let paradaSugerida = null;
-
-    try {
-      if (textoParaGeo) {
-        geo = await geocodificarDireccion(textoParaGeo);
-      }
-
-      if (geo?.lat != null && geo?.lng != null) {
-        paradaSugerida = await buscarParadaMasCercana(geo.lat, geo.lng);
-      }
-    } catch (e) {
-      console.error("❌ Error geocodificando test/oferta-real:", e.message);
-    }
-
-    const solicitud = await prisma.solicitudViaje.create({
-      data: {
-        nombreCliente,
-        telefonoCliente,
-        direccionRecogida,
-        direccionBase,
-        referenciaRecogida,
-        latRecogida: geo?.lat ?? null,
-        lngRecogida: geo?.lng ?? null,
-        paradaSugeridaId: paradaSugerida?.id ?? null,
-        estado: "pendiente",
-        confirmadaEn: new Date(),
-      },
-    });
-
-    const taxista = await buscarSiguienteTaxistaDisponible(solicitud.id);
-
-    if (!taxista) {
-      return res.status(404).json({
-        ok: false,
-        error: "No hay taxistas disponibles",
-        solicitud,
-      });
-    }
-
-    await prisma.solicitudViaje.update({
-      where: { id: solicitud.id },
-      data: { estado: "ofertada" },
-    });
-
-    const oferta = await emitirOfertaATaxista({
-      solicitud,
-      taxista,
-    });
-
-    res.json({
-      ok: true,
-      solicitudId: solicitud.id,
-      ofertaId: oferta.id,
-      taxistaId: taxista.id,
-    });
-  } catch (error) {
-    res.status(500).json({
-      ok: false,
-      error: error.message,
-    });
-  }
-});
-
 app.get("/vehiculos", async (req, res) => {
   try {
     const vehiculos = await prisma.vehiculo.findMany({
@@ -1581,8 +1396,6 @@ app.get("/vehiculos", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-registerIncomingCallRoute(app, llamadas);
 
 iniciarSocket(server);
 

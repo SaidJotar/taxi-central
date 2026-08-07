@@ -21,8 +21,6 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
 
     if (typeof lat !== "number" || typeof lng !== "number") return;
 
-    console.log("📡 background location:", { lat, lng });
-
     const token = await AsyncStorage.getItem("token");
     if (!token) return;
 

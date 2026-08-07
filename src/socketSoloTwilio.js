@@ -364,14 +364,7 @@ function iniciarSocket(server) {
           });
           return;
         }
-        /*
-        console.log("📍 backend recibe ubicación", {
-          taxistaId,
-          lat,
-          lng,
-          at: new Date().toISOString(),
-        });
-*/
+
         const taxista = await prisma.taxista.update({
           where: { id: taxistaId },
           data: {
