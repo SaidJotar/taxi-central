@@ -1,6 +1,10 @@
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+const {
+  buscarParadaPorNombre,
+} = require("./paradasService");
+
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // Centro aproximado de Ceuta.
@@ -20,6 +24,10 @@ const CEUTA_BOUNDS = {
   minLng: -5.42,
   maxLng: -5.20,
 };
+
+function parecePeticionDeParada(texto = "") {
+  return /\bparada\b|\btaxi\b|\btaxis\b/i.test(texto);
+}
 
 function limpiarDireccion(direccionTexto = "") {
   return direccionTexto
@@ -402,6 +410,32 @@ async function geocodificarDireccion(direccionTexto) {
       "🔎 Consulta preparada:",
       consulta
     );
+
+    if (parecePeticionDeParada(direccionTexto)) {
+      const paradaBD =
+        await buscarParadaPorNombre(direccionTexto);
+
+      if (paradaBD) {
+        console.log(
+          "✅ Ubicación resuelta con parada de BD:",
+          paradaBD.nombre
+        );
+
+        return {
+          encontrada: true,
+          motivo: "parada_bd",
+          nombre: paradaBD.nombre,
+          direccionFormateada:
+            paradaBD.direccion || paradaBD.nombre,
+          lat: Number(paradaBD.lat),
+          lng: Number(paradaBD.lng),
+          placeId: null,
+          tipos: ["taxi_stand"],
+          fuente: "base_datos",
+          paradaId: paradaBD.id,
+        };
+      }
+    }
 
     // 1. Negocios, establecimientos, edificios y POI.
     const resultadoPlaces =

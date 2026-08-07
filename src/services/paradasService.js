@@ -30,6 +30,95 @@ async function buscarParadaMasCercana(lat, lng) {
   return mejor;
 }
 
+function normalizarNombreParada(texto = "") {
+  return String(texto)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\bparada(s)?\b/g, "")
+    .replace(/\btaxi(s)?\b/g, "")
+    .replace(/\bde\b/g, "")
+    .replace(/\bdel\b/g, "")
+    .replace(/\bla\b/g, "")
+    .replace(/\bel\b/g, "")
+    .replace(/\ben\b/g, "")
+    .replace(/\bceuta\b/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function buscarParadaPorNombre(texto) {
+  const consulta = normalizarNombreParada(texto);
+
+  if (!consulta) {
+    return null;
+  }
+
+  const paradas = await prisma.parada.findMany({
+    where: {
+      activa: true,
+    },
+  });
+
+  let mejor = null;
+  let mejorPuntuacion = 0;
+
+  for (const parada of paradas) {
+    const nombre = normalizarNombreParada(parada.nombre || "");
+    const direccion = normalizarNombreParada(parada.direccion || "");
+
+    let puntuacion = 0;
+
+    if (nombre === consulta) {
+      puntuacion += 100;
+    }
+
+    if (nombre.includes(consulta)) {
+      puntuacion += 50;
+    }
+
+    if (consulta.includes(nombre) && nombre.length >= 3) {
+      puntuacion += 40;
+    }
+
+    if (direccion.includes(consulta)) {
+      puntuacion += 30;
+    }
+
+    const palabrasConsulta = consulta
+      .split(" ")
+      .filter((p) => p.length >= 3);
+
+    for (const palabra of palabrasConsulta) {
+      if (nombre.includes(palabra)) {
+        puntuacion += 10;
+      }
+
+      if (direccion.includes(palabra)) {
+        puntuacion += 5;
+      }
+    }
+
+    if (puntuacion > mejorPuntuacion) {
+      mejorPuntuacion = puntuacion;
+      mejor = parada;
+    }
+  }
+
+  if (!mejor || mejorPuntuacion < 10) {
+    return null;
+  }
+
+  console.log("🚕 Parada encontrada en BD:", {
+    id: mejor.id,
+    nombre: mejor.nombre,
+    puntuacion: mejorPuntuacion,
+  });
+
+  return mejor;
+}
+
 async function buscarParadaCercanaParaEntrada(lat, lng, radioMetros = 40) {
   const parada = await buscarParadaMasCercana(lat, lng);
 
@@ -70,4 +159,5 @@ module.exports = {
   buscarParadaMasCercana,
   buscarParadaCercanaParaEntrada,
   obtenerColaParada,
+  buscarParadaPorNombre,
 };
