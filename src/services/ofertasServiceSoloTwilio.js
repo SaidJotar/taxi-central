@@ -82,7 +82,6 @@ async function buscarTaxiMasCercano(lat, lng, taxistasExcluidos = []) {
   });
 
   console.log("Taxistas encontrados:", taxistas.length);
-  console.log(taxistas);
 
   if (!taxistas.length) return null;
 
@@ -306,8 +305,6 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
       referenciaRecogida: solicitud.referenciaRecogida || null,
     },
   });
-
-  console.log("TOKEN BD:", taxista.expoPushToken);
 
   try {
     await enviarPushOferta(

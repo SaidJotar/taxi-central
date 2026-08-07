@@ -50,7 +50,6 @@ export default function LoginScreen() {
     await setSession(token, taxista);
 
     const expoPushToken = await registerForPushNotificationsAsync();
-    console.log("expoPushToken NUEVO:", expoPushToken);
 
     if (expoPushToken) {
       try {

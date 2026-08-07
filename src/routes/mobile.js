@@ -10,11 +10,6 @@ router.post("/push-token", authTaxista, async (req, res) => {
     const { expoPushToken } = req.body || {};
     const taxistaId = req.taxistaAuth.taxistaId;
 
-    console.log("📲 /mobile/push-token");
-    console.log("taxistaId:", taxistaId);
-    console.log("body:", req.body);
-    console.log("expoPushToken:", expoPushToken);
-
     if (!expoPushToken) {
       return res.status(400).json({
         ok: false,
@@ -26,8 +21,6 @@ router.post("/push-token", authTaxista, async (req, res) => {
       where: { id: taxistaId },
       data: { expoPushToken },
     });
-
-    console.log("✅ expoPushToken guardado para taxista:", taxistaId);
 
     return res.json({ ok: true });
   } catch (error) {
