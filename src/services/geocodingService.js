@@ -119,6 +119,7 @@ async function buscarConPlaces(textoConsulta) {
   }
 
   const data = await response.json();
+
   const resultados = Array.isArray(data.places)
     ? data.places
     : [];
@@ -153,10 +154,150 @@ async function buscarConPlaces(textoConsulta) {
     return null;
   }
 
-  const primero = candidatosCeuta[0];
+  const normalizarTexto = (texto = "") =>
+    texto
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const palabrasIgnoradas = new Set([
+    "de",
+    "del",
+    "la",
+    "el",
+    "los",
+    "las",
+    "en",
+    "a",
+    "al",
+    "ceuta",
+    "calle",
+    "avenida",
+    "av",
+    "carretera",
+    "ctra",
+  ]);
+
+  const consultaNormalizada =
+    normalizarTexto(textoConsulta);
+
+  const palabrasConsulta =
+    consultaNormalizada
+      .split(" ")
+      .filter(
+        (palabra) =>
+          palabra.length >= 3 &&
+          !palabrasIgnoradas.has(palabra)
+      );
+
+  const candidatosPuntuados =
+    candidatosCeuta.map((candidato) => {
+      const nombreNormalizado =
+        normalizarTexto(candidato.nombre || "");
+
+      const direccionNormalizada =
+        normalizarTexto(
+          candidato.direccionFormateada || ""
+        );
+
+      const textoCandidato =
+        `${nombreNormalizado} ${direccionNormalizada}`;
+
+      let puntuacion = 0;
+
+      for (const palabra of palabrasConsulta) {
+        if (nombreNormalizado.includes(palabra)) {
+          puntuacion += 5;
+        } else if (
+          direccionNormalizada.includes(palabra)
+        ) {
+          puntuacion += 3;
+        }
+      }
+
+      // Coincidencia fuerte del texto completo
+      if (
+        nombreNormalizado &&
+        consultaNormalizada.includes(nombreNormalizado)
+      ) {
+        puntuacion += 8;
+      }
+
+      // Favorece paradas de taxi cuando el usuario las pide
+      if (
+        consultaNormalizada.includes("parada") &&
+        consultaNormalizada.includes("taxi") &&
+        candidato.tipos.some((tipo) =>
+          [
+            "taxi_stand",
+            "transportation_service",
+          ].includes(tipo)
+        )
+      ) {
+        puntuacion += 4;
+      }
+
+      return {
+        ...candidato,
+        puntuacion,
+      };
+    });
+
+  candidatosPuntuados.sort(
+    (a, b) => b.puntuacion - a.puntuacion
+  );
+
+  console.log(
+    "🔎 Candidatos Places puntuados:",
+    candidatosPuntuados.map((candidato) => ({
+      nombre: candidato.nombre,
+      direccion: candidato.direccionFormateada,
+      puntuacion: candidato.puntuacion,
+      lat: candidato.lat,
+      lng: candidato.lng,
+    }))
+  );
+
+  const mejor = candidatosPuntuados[0];
+
+  if (!mejor) {
+    return null;
+  }
+
+  /*
+   * Si hay palabras importantes como "Morro", "Benítez",
+   * "San Amaro", etc. y ninguna coincide con el candidato,
+   * no aceptamos un resultado genérico solo porque sea una
+   * parada de taxi.
+   */
+  const palabrasEspecificas =
+    palabrasConsulta.filter(
+      (palabra) =>
+        !["parada", "taxi"].includes(palabra)
+    );
+
+  if (
+    palabrasEspecificas.length > 0 &&
+    mejor.puntuacion <= 4
+  ) {
+    console.log(
+      "⚠️ Places devolvió resultados, pero ninguno coincide suficientemente con la consulta."
+    );
+
+    return null;
+  }
 
   return normalizarResultado({
-    ...primero,
+    nombre: mejor.nombre,
+    direccionFormateada:
+      mejor.direccionFormateada,
+    lat: mejor.lat,
+    lng: mejor.lng,
+    placeId: mejor.placeId,
+    tipos: mejor.tipos,
     fuente: "places_text_search",
   });
 }
