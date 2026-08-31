@@ -15,6 +15,10 @@ const mobileRoutes = require("./routes/mobile");
 const clienteRoutes = require("./routes/cliente");
 const app = express();
 
+const {
+  guardarLlamadaPorSolicitud,
+} = require("./llamadasActivas");
+
 app.set("trust proxy", 1);
 
 const allowedOrigins = [
@@ -793,6 +797,20 @@ app.post(
           });
       }
 
+      guardarLlamadaPorSolicitud(
+        solicitud.id,
+        {
+          callId: call.call_id || null,
+          solicitudId: solicitud.id,
+          estado: "buscando",
+        }
+      );
+
+      console.log("📞 Retell vinculado en memoria:", {
+        solicitudId: solicitud.id,
+        callId: call.call_id || null,
+      });
+
       /*
        * Intentamos lanzar la primera oferta. Si ya existe
        * una oferta pendiente, la función no crea otra.
@@ -1345,6 +1363,60 @@ app.post(
     }
   }
 );
+
+/*
+Funcion obtención audio de llamada
+*/
+
+app.get("/retell/call/:callId/audio", async (req, res) => {
+  try {
+    const { callId } = req.params;
+
+    if (!callId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta callId",
+      });
+    }
+
+    const response = await fetch(
+      `https://api.retellai.com/v2/get-call/${callId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        ok: false,
+        error: "La llamada ya no está disponible",
+      });
+    }
+
+    const call = await response.json();
+
+    if (!call.recording_url) {
+      return res.status(404).json({
+        ok: false,
+        error: "La grabación todavía no está disponible",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      recordingUrl: call.recording_url,
+    });
+  } catch (error) {
+    console.error("❌ Error obteniendo audio Retell:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo obtener la grabación",
+    });
+  }
+});
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());

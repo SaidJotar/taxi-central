@@ -195,7 +195,7 @@ export default function GlobalOfertaLayer() {
          */
         if (
           numeroOperacion !==
-            operacionAudioRef.current ||
+          operacionAudioRef.current ||
           !montadoRef.current
         ) {
           return;
@@ -212,7 +212,7 @@ export default function GlobalOfertaLayer() {
          */
         if (
           numeroOperacion !==
-            operacionAudioRef.current ||
+          operacionAudioRef.current ||
           !montadoRef.current
         ) {
           return;
@@ -270,8 +270,8 @@ export default function GlobalOfertaLayer() {
 
     const onOfertaRecibida = (data) => {
       console.log(
-        "📥 oferta:recibida",
-        data?.ofertaId
+        "📥 oferta:recibida COMPLETA",
+        JSON.stringify(data, null, 2)
       );
 
       setOferta((actual) => {
@@ -351,8 +351,8 @@ export default function GlobalOfertaLayer() {
 
     const onOfertaAceptada = async (data) => {
       console.log(
-        "📥 oferta:aceptada_ok",
-        data?.ofertaId
+        "📥 oferta:aceptada_ok COMPLETA",
+        JSON.stringify(data, null, 2)
       );
 
       /*
@@ -366,6 +366,11 @@ export default function GlobalOfertaLayer() {
 
       if (!solicitud) return;
 
+      console.log(
+        "📞 CALL ID RECIBIDO:",
+        solicitud.callId
+      );
+
       setServicioActivo({
         solicitudId: solicitud.id,
         nombreCliente:
@@ -378,6 +383,8 @@ export default function GlobalOfertaLayer() {
           solicitud.direccionBase,
         referenciaRecogida:
           solicitud.referenciaRecogida,
+        callId:
+          solicitud.callId || null,
       });
     };
 

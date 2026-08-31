@@ -106,12 +106,12 @@ async function buscarTaxiMasCercano(lat, lng, taxistasExcluidos = []) {
     "📍 taxi más cercano calculado:",
     mejor
       ? {
-          taxistaId: mejor.taxista.id,
-          telefono: mejor.taxista.telefono,
-          distanciaMetros: Math.round(mejor.distancia),
-          paradaId: mejor.taxista.paradaId || null,
-          paradaNombre: mejor.taxista.parada?.nombre || null,
-        }
+        taxistaId: mejor.taxista.id,
+        telefono: mejor.taxista.telefono,
+        distanciaMetros: Math.round(mejor.distancia),
+        paradaId: mejor.taxista.paradaId || null,
+        paradaNombre: mejor.taxista.parada?.nombre || null,
+      }
       : null
   );
 
@@ -293,6 +293,21 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
   const io = obtenerIo();
 
   const expiresAt = new Date(Date.now() + OFERTA_TIMEOUT_MS).toISOString();
+
+  const llamadaActiva =
+    obtenerLlamadaPorSolicitud(solicitud.id);
+
+
+  console.log("🧠 LLAMADA EN MEMORIA AL OFERTAR:", {
+    solicitudId: solicitud.id,
+    llamadaActiva,
+  });
+
+  const callId =
+    llamadaActiva?.callId || null;
+
+  console.log("📞 CALL ID QUE SE ENVÍA AL TAXISTA:", callId);
+
   io.to(`taxista:${taxista.id}`).emit("oferta:recibida", {
     ofertaId: oferta.id,
     expiresAt,
@@ -302,7 +317,10 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
       telefonoCliente: solicitud.telefonoCliente,
       direccionRecogida: solicitud.direccionRecogida,
       direccionBase: solicitud.direccionBase || null,
-      referenciaRecogida: solicitud.referenciaRecogida || null,
+      referenciaRecogida:
+        solicitud.referenciaRecogida || null,
+
+      callId,
     },
   });
 

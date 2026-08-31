@@ -1,5 +1,8 @@
 const prisma = require("./bd");
 const {
+  guardarLlamadaPorSolicitud,
+} = require("../llamadasActivas");
+const {
   buscarSiguienteTaxistaDisponible,
   emitirOfertaATaxista,
 } = require("./ofertasServiceSoloTwilio");
@@ -172,6 +175,17 @@ async function crearSolicitudTaxi(estadoLlamada) {
     },
   });
 
+  estadoLlamada.referencia = solicitud.id;
+
+  guardarLlamadaPorSolicitud(
+    solicitud.id,
+    estadoLlamada
+  );
+
+  console.log("📞 Llamada vinculada en memoria:", {
+    solicitudId: solicitud.id,
+    callId: estadoLlamada.callId || null,
+  });
   const taxista = await buscarSiguienteTaxistaDisponible(solicitud.id);
 
   if (!taxista) {

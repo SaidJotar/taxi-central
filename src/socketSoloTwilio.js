@@ -877,10 +877,13 @@ function iniciarSocket(server) {
             nombreCliente: solicitudActualizada.nombreCliente,
             telefonoCliente: solicitudActualizada.telefonoCliente,
             direccionRecogida: solicitudActualizada.direccionRecogida,
-            direccionBase: solicitudActualizada.direccionBase || null,
+            direccionBase:
+              solicitudActualizada.direccionBase || null,
             referenciaRecogida:
               solicitudActualizada.referenciaRecogida || null,
             estado: solicitudActualizada.estado,
+
+            callId: llamadaActiva?.callId || null,
           },
         });
 

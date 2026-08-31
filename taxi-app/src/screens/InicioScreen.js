@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useAudioPlayer } from "expo-audio";
 
 import { getSocket } from "../api/socket";
 import { useAuth } from "../context/AuthContext";
@@ -34,6 +35,8 @@ export default function InicioScreen() {
   const [conectado, setConectado] = useState(false);
   const [estado, setEstado] = useState(taxista?.estado || "desconectado");
   const { servicioActivo, setServicioActivo } = useOferta();
+
+  //const llamadaPlayer = useAudioPlayer(null);
 
   const servicioActivoRef = useRef(servicioActivo);
 
@@ -75,6 +78,11 @@ export default function InicioScreen() {
     activo: gpsDebeEstarActivo,
     onGpsPerdido: handleGpsPerdido,
   });
+
+  const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  "https://api.sjaceuta.es"
+).replace(/\/$/, "");
 
   const tieneGpsBackendReciente = (() => {
     if (!taxista?.ubicacionActualizadaEn) return false;
@@ -434,6 +442,72 @@ export default function InicioScreen() {
     return () => clearInterval(interval);
   }, [paradaEntrando]);
 
+  const obtenerAudioLlamada = async () => {
+    try {
+      if (!servicioActivo?.callId) {
+        Alert.alert(
+          "Llamada no disponible",
+          "Este servicio no tiene una llamada asociada."
+        );
+        return null;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/retell/call/${servicioActivo.callId}/audio`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.recordingUrl) {
+        Alert.alert(
+          "Llamada no disponible",
+          "La grabación todavía no está disponible o ya ha caducado."
+        );
+
+        return null;
+      }
+
+      return data.recordingUrl;
+    } catch (error) {
+      console.log(
+        "❌ Error obteniendo grabación:",
+        error
+      );
+
+      Alert.alert(
+        "Llamada no disponible",
+        "No se pudo obtener la grabación."
+      );
+
+      return null;
+    }
+  };
+
+  const escucharLlamadaCliente = async () => {
+    try {
+      const recordingUrl = await obtenerAudioLlamada();
+
+      if (!recordingUrl) {
+        return;
+      }
+
+      console.log("🎧 Reproduciendo llamada:", recordingUrl);
+
+ //     llamadaPlayer.replace({
+ //       uri: recordingUrl,
+ //     });
+
+  //    llamadaPlayer.play();
+    } catch (error) {
+      console.log("❌ Error reproduciendo llamada:", error);
+
+      Alert.alert(
+        "Llamada no disponible",
+        "No se ha podido reproducir la grabación."
+      );
+    }
+  };
+
   const cambiarEstado = async (nuevoEstado) => {
     console.log("🟦 cambiarEstado llamado con:", nuevoEstado);
 
@@ -717,6 +791,30 @@ export default function InicioScreen() {
                     {servicioActivo.referenciaRecogida}
                   </Text>
                 </View>
+              )}
+
+              {servicioActivo?.callId && (
+                <TouchableOpacity
+                  style={styles.llamadaButton}
+                  onPress={escucharLlamadaCliente}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="play-circle-outline"
+                    size={24}
+                    color="#2563eb"
+                  />
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.llamadaButtonTitle}>
+                      Escuchar llamada
+                    </Text>
+
+                    <Text style={styles.llamadaButtonSubtitle}>
+                      Escuchar conversación con el cliente
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               )}
 
               <TouchableOpacity
@@ -1224,6 +1322,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef2f2",
     marginTop: 14,
     marginBottom: 10,
+  },
+
+  llamadaButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 14,
+    marginBottom: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+
+  llamadaButtonTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1e3a8a",
+  },
+
+  llamadaButtonSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
   },
 
   clienteNoLocalizadoText: {
