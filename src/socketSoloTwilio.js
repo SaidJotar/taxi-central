@@ -214,117 +214,113 @@ function iniciarSocket(server) {
       socket.emit("error:general", { message: error.message });
     }
 
-socket.on(
-  "taxista:recuperar_servicio_activo",
-  async (_, callback) => {
-    try {
-      const taxistaId =
-        socket.taxistaAuth?.taxistaId;
+    socket.on(
+      "taxista:recuperar_servicio_activo",
+      async (_, callback) => {
+        try {
+          const taxistaId =
+            socket.taxistaAuth?.taxistaId;
 
-      console.log(
-        "🔄 Recuperando servicio activo:",
-        taxistaId
-      );
+          console.log(
+            "🔄 Recuperando servicio activo:",
+            taxistaId
+          );
 
-      if (!taxistaId) {
-        return callback({
-          servicioActivo: null,
-        });
-      }
+          if (!taxistaId) {
+            return callback({
+              servicioActivo: null,
+            });
+          }
 
-      const asignacion =
-        await prisma.asignacionSolicitud.findFirst({
-          where: {
-            taxistaId,
+          const asignacion =
+            await prisma.asignacionSolicitud.findFirst({
+              where: {
+                taxistaId,
 
-            solicitudViaje: {
-              estado: "asignada",
-            },
-          },
-
-          include: {
-            solicitudViaje: true,
-            taxista: {
-              include: {
-                vehiculo: true,
+                solicitudViaje: {
+                  estado: "asignada",
+                },
               },
-            },
-          },
 
-          orderBy: {
-            creadaEn: "desc",
-          },
-        });
+              include: {
+                solicitudViaje: true,
+                taxista: {
+                  include: {
+                    vehiculo: true,
+                  },
+                },
+              },
+            });
 
-      console.log(
-        "🔎 Asignación recuperada:",
-        asignacion?.id || null
-      );
+          console.log(
+            "🔎 Asignación recuperada:",
+            asignacion?.id || null
+          );
 
-      if (!asignacion) {
-        return callback({
-          servicioActivo: null,
-        });
+          if (!asignacion) {
+            return callback({
+              servicioActivo: null,
+            });
+          }
+
+          const solicitud =
+            asignacion.solicitudViaje;
+
+          const llamadaActiva =
+            obtenerLlamadaPorSolicitud(
+              solicitud.id
+            );
+
+          const servicioActivo = {
+            solicitudId:
+              solicitud.id,
+
+            nombreCliente:
+              solicitud.nombreCliente,
+
+            telefonoCliente:
+              solicitud.telefonoCliente,
+
+            latRecogida:
+              solicitud.latRecogida,
+
+            lngRecogida:
+              solicitud.lngRecogida,
+
+            direccionRecogida:
+              solicitud.direccionRecogida,
+
+            direccionBase:
+              solicitud.direccionBase,
+
+            referenciaRecogida:
+              solicitud.referenciaRecogida,
+
+            callId:
+              llamadaActiva?.callId || null,
+          };
+
+          console.log(
+            "✅ Servicio activo recuperado:",
+            servicioActivo.solicitudId
+          );
+
+          return callback({
+            servicioActivo,
+          });
+
+        } catch (error) {
+          console.error(
+            "❌ Error recuperando servicio:",
+            error
+          );
+
+          callback({
+            servicioActivo: null,
+          });
+        }
       }
-
-      const solicitud =
-        asignacion.solicitudViaje;
-
-      const llamadaActiva =
-        obtenerLlamadaPorSolicitud(
-          solicitud.id
-        );
-
-      const servicioActivo = {
-        solicitudId:
-          solicitud.id,
-
-        nombreCliente:
-          solicitud.nombreCliente,
-
-        telefonoCliente:
-          solicitud.telefonoCliente,
-
-        latRecogida:
-          solicitud.latRecogida,
-
-        lngRecogida:
-          solicitud.lngRecogida,
-
-        direccionRecogida:
-          solicitud.direccionRecogida,
-
-        direccionBase:
-          solicitud.direccionBase,
-
-        referenciaRecogida:
-          solicitud.referenciaRecogida,
-
-        callId:
-          llamadaActiva?.callId || null,
-      };
-
-      console.log(
-        "✅ Servicio activo recuperado:",
-        servicioActivo.solicitudId
-      );
-
-      return callback({
-        servicioActivo,
-      });
-
-    } catch (error) {
-      console.error(
-        "❌ Error recuperando servicio:",
-        error
-      );
-
-      callback({
-        servicioActivo: null,
-      });
-    }
-  }
-);
+    );
 
     socket.on("taxista:conectar", async () => {
       try {
