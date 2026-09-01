@@ -214,6 +214,111 @@ function iniciarSocket(server) {
       socket.emit("error:general", { message: error.message });
     }
 
+    socket.on(
+      "taxista:recuperar_servicio_activo",
+      async (_, callback) => {
+        try {
+          const taxistaId =
+            socket.data.taxistaId;
+
+          if (!taxistaId) {
+            return callback({
+              servicioActivo: null,
+            });
+          }
+
+          /*
+           * BUSCAR EN BD EL SERVICIO
+           * QUE SIGUE ASIGNADO A ESTE TAXISTA
+           */
+          const asignacion =
+            await prisma.asignacionSolicitud.findFirst({
+              where: {
+                taxistaId,
+
+                solicitud: {
+                  estado: {
+                    in: [
+                      "asignada",
+                      "en_servicio",
+                    ],
+                  },
+                },
+              },
+
+              include: {
+                solicitud: true,
+                taxista: {
+                  include: {
+                    vehiculo: true,
+                  },
+                },
+              },
+
+              orderBy: {
+                creadaEn: "desc",
+              },
+            });
+
+
+          if (!asignacion) {
+            return callback({
+              servicioActivo: null,
+            });
+          }
+
+
+          const solicitud =
+            asignacion.solicitud;
+
+
+          const servicioActivo = {
+            solicitudId:
+              solicitud.id,
+
+            nombreCliente:
+              solicitud.nombreCliente,
+
+            telefonoCliente:
+              solicitud.telefonoCliente,
+
+            latRecogida:
+              solicitud.latRecogida,
+
+            lngRecogida:
+              solicitud.lngRecogida,
+
+            direccionRecogida:
+              solicitud.direccionRecogida,
+
+            direccionBase:
+              solicitud.direccionBase,
+
+            referenciaRecogida:
+              solicitud.referenciaRecogida,
+
+            callId:
+              solicitud.callId || null,
+          };
+
+
+          return callback({
+            servicioActivo,
+          });
+
+        } catch (error) {
+          console.error(
+            "❌ Error recuperando servicio:",
+            error
+          );
+
+          callback({
+            servicioActivo: null,
+          });
+        }
+      }
+    );
+
     socket.on("taxista:conectar", async () => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;

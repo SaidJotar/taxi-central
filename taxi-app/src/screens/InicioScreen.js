@@ -13,7 +13,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useAudioPlayer } from "expo-audio";
+import {
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  setIsAudioActiveAsync,
+} from "expo-audio";
 
 import { getSocket } from "../api/socket";
 import { useAuth } from "../context/AuthContext";
@@ -36,7 +40,22 @@ export default function InicioScreen() {
   const [estado, setEstado] = useState(taxista?.estado || "desconectado");
   const { servicioActivo, setServicioActivo } = useOferta();
 
-  //const llamadaPlayer = useAudioPlayer(null);
+  const llamadaPlayer =
+    useAudioPlayer(null);
+
+  const llamadaCargadaIdRef = useRef(null);
+
+  const estadoLlamadaPlayer =
+    useAudioPlayerStatus(llamadaPlayer);
+
+  /*
+   * Nos indica que hemos pulsado Escuchar
+   * y estamos esperando a que replace()
+   * termine de cargar el WAV.
+   */
+  const esperandoAudioRef =
+    useRef(false);
+
 
   const servicioActivoRef = useRef(servicioActivo);
 
@@ -60,6 +79,11 @@ export default function InicioScreen() {
 
   const [mostrarChatServicio, setMostrarChatServicio] = useState(false);
 
+  const [mensajesNoLeidos, setMensajesNoLeidos] = useState(0);
+
+  const mensajesInicializadosRef = useRef(false);
+  const ultimoMensajeClienteRef = useRef(null);
+
   const gpsDebeEstarActivo = estado !== "desconectado";
 
   const handleGpsPerdido = useCallback(() => {
@@ -80,9 +104,9 @@ export default function InicioScreen() {
   });
 
   const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  "https://api.sjaceuta.es"
-).replace(/\/$/, "");
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    "https://api.sjaceuta.es"
+  ).replace(/\/$/, "");
 
   const tieneGpsBackendReciente = (() => {
     if (!taxista?.ubicacionActualizadaEn) return false;
@@ -105,6 +129,44 @@ export default function InicioScreen() {
       }
     });
   }, [socket]);
+
+  const recuperarServicioActivo = useCallback(() => {
+    if (!socket?.connected) return;
+
+    console.log("🔄 Buscando servicio activo del taxista...");
+
+    socket.emit(
+      "taxista:recuperar_servicio_activo",
+      null,
+      (respuesta) => {
+        console.log(
+          "📥 recuperar_servicio_activo:",
+          respuesta
+        );
+
+        if (respuesta?.servicioActivo) {
+          servicioActivoRef.current =
+            respuesta.servicioActivo;
+
+          setServicioActivo(
+            respuesta.servicioActivo
+          );
+
+          console.log(
+            "✅ Servicio activo recuperado"
+          );
+        } else {
+          servicioActivoRef.current = null;
+
+          setServicioActivo(null);
+
+          console.log(
+            "ℹ️ No existe servicio activo"
+          );
+        }
+      }
+    );
+  }, [socket, setServicioActivo]);
 
   useEffect(() => {
     cargarTaxisDisponibles();
@@ -130,6 +192,60 @@ export default function InicioScreen() {
     return () => clearInterval(intervalo);
   }, [cargarPosicionEnCola]);
 
+  useEffect(() => {
+    console.log("🎧 Estado reproductor:", {
+      isLoaded:
+        estadoLlamadaPlayer.isLoaded,
+      playing:
+        estadoLlamadaPlayer.playing,
+      duration:
+        estadoLlamadaPlayer.duration,
+      currentTime:
+        estadoLlamadaPlayer.currentTime,
+      error:
+        estadoLlamadaPlayer.error,
+    });
+
+    if (!esperandoAudioRef.current) {
+      return;
+    }
+
+    if (!estadoLlamadaPlayer.isLoaded) {
+      return;
+    }
+
+    try {
+      console.log(
+        "✅ WAV cargado. Iniciando reproducción..."
+      );
+
+      llamadaPlayer.volume = 1;
+      llamadaPlayer.muted = false;
+
+      llamadaPlayer.play();
+
+      esperandoAudioRef.current = false;
+
+      console.log(
+        "▶️ llamadaPlayer.play() ejecutado"
+      );
+    } catch (error) {
+      console.log(
+        "❌ Error ejecutando play:",
+        error?.message || error
+      );
+
+      esperandoAudioRef.current = false;
+
+      Alert.alert(
+        "Error de audio",
+        "No se ha podido reproducir la llamada."
+      );
+    }
+  }, [
+    estadoLlamadaPlayer.isLoaded,
+  ]);
+
 
   useEffect(() => {
     setConectado(!!socket?.connected);
@@ -138,6 +254,94 @@ export default function InicioScreen() {
   useEffect(() => {
     servicioActivoRef.current = servicioActivo;
   }, [servicioActivo]);
+
+  useEffect(() => {
+    if (!socket || !servicioActivo?.solicitudId) {
+      mensajesInicializadosRef.current = false;
+      ultimoMensajeClienteRef.current = null;
+      setMensajesNoLeidos(0);
+      return;
+    }
+
+    const solicitudIdActual =
+      String(servicioActivo.solicitudId);
+
+    /*
+     * Cuando cambia de servicio,
+     * reiniciamos el contador.
+     */
+    mensajesInicializadosRef.current = false;
+    ultimoMensajeClienteRef.current = null;
+    setMensajesNoLeidos(0);
+
+    const onNuevoMensaje = (data) => {
+      if (
+        String(data?.solicitudId) !==
+        solicitudIdActual
+      ) {
+        return;
+      }
+
+      const mensaje = data?.mensaje;
+
+      if (!mensaje) {
+        return;
+      }
+
+      /*
+       * Al taxista solo le interesan
+       * los mensajes enviados por el cliente.
+       */
+      if (mensaje.emisorTipo !== "cliente") {
+        return;
+      }
+
+      /*
+       * Si el chat está abierto,
+       * no contamos el mensaje como no leído.
+       */
+      if (mostrarChatServicio) {
+        ultimoMensajeClienteRef.current =
+          mensaje.id;
+
+        return;
+      }
+
+      /*
+       * Evitar duplicados.
+       */
+      if (
+        ultimoMensajeClienteRef.current ===
+        mensaje.id
+      ) {
+        return;
+      }
+
+      ultimoMensajeClienteRef.current =
+        mensaje.id;
+
+      setMensajesNoLeidos(
+        (actual) => actual + 1
+      );
+    };
+
+    socket.on(
+      "chat:nuevo_mensaje",
+      onNuevoMensaje
+    );
+
+    return () => {
+      socket.off(
+        "chat:nuevo_mensaje",
+        onNuevoMensaje
+      );
+    };
+
+  }, [
+    socket,
+    servicioActivo?.solicitudId,
+    mostrarChatServicio,
+  ]);
 
   useEffect(() => {
     if (!servicioActivo) return;
@@ -170,8 +374,36 @@ export default function InicioScreen() {
     }
 
     socket.on("connect", () => {
-      console.log("🟢 socket conectado", socket.id);
+      console.log(
+        "🟢 socket conectado",
+        socket.id
+      );
+
       setConectado(true);
+
+      socket.emit(
+        "taxista:recuperar_servicio_activo",
+        null,
+        (respuesta) => {
+          console.log(
+            "📥 Servicio tras reconexión:",
+            respuesta
+          );
+
+          if (respuesta?.servicioActivo) {
+            servicioActivoRef.current =
+              respuesta.servicioActivo;
+
+            setServicioActivo(
+              respuesta.servicioActivo
+            );
+          } else {
+            servicioActivoRef.current = null;
+
+            setServicioActivo(null);
+          }
+        }
+      );
     });
 
     socket.on("disconnect", (reason) => {
@@ -238,6 +470,16 @@ export default function InicioScreen() {
       setCostoFinalInput("");
       setGuardandoCierre(false);
       setMostrarChatServicio(false);
+
+      try {
+        llamadaPlayer.pause();
+        await llamadaPlayer.seekTo(0);
+      } catch {
+        // No pasa nada si no había audio
+      }
+
+      llamadaCargadaIdRef.current = null;
+      esperandoAudioRef.current = false;
 
       servicioActivoRef.current = null;
       setServicioActivo(null);
@@ -442,64 +684,186 @@ export default function InicioScreen() {
     return () => clearInterval(interval);
   }, [paradaEntrando]);
 
-  const obtenerAudioLlamada = async () => {
+  const obtenerAudioLlamada =
+    async () => {
+      try {
+        if (
+          !servicioActivo?.callId
+        ) {
+          Alert.alert(
+            "Llamada no disponible",
+            "Este servicio no tiene una llamada asociada."
+          );
+
+          return null;
+        }
+
+        console.log(
+          "📞 Solicitando grabación Retell:",
+          servicioActivo.callId
+        );
+
+        const response =
+          await fetch(
+            `${API_BASE_URL}/retell/call/${servicioActivo.callId}/audio`
+          );
+
+        const data =
+          await response.json();
+
+        console.log(
+          "📥 Respuesta audio backend:",
+          data
+        );
+
+        if (
+          !response.ok ||
+          !data?.recordingUrl
+        ) {
+          Alert.alert(
+            "Llamada no disponible",
+            "La grabación todavía no está disponible o ya ha caducado."
+          );
+
+          return null;
+        }
+
+        return data.recordingUrl;
+      } catch (error) {
+        console.log(
+          "❌ Error obteniendo grabación:",
+          error?.message || error
+        );
+
+        Alert.alert(
+          "Llamada no disponible",
+          "No se pudo obtener la grabación."
+        );
+
+        return null;
+      }
+    };
+
+
+  const escucharLlamadaCliente = async () => {
     try {
-      if (!servicioActivo?.callId) {
+      const callIdActual =
+        servicioActivo?.callId || null;
+
+      if (!callIdActual) {
         Alert.alert(
           "Llamada no disponible",
           "Este servicio no tiene una llamada asociada."
         );
-        return null;
+        return;
       }
 
-      const response = await fetch(
-        `${API_BASE_URL}/retell/call/${servicioActivo.callId}/audio`
-      );
+      // ==================================================
+      // ESTE MISMO AUDIO YA ESTÁ REPRODUCIÉNDOSE
+      // ==================================================
+      if (
+        llamadaCargadaIdRef.current === callIdActual &&
+        estadoLlamadaPlayer.playing
+      ) {
+        console.log("⏸️ Pausando llamada");
 
-      const data = await response.json();
-
-      if (!response.ok || !data.recordingUrl) {
-        Alert.alert(
-          "Llamada no disponible",
-          "La grabación todavía no está disponible o ya ha caducado."
-        );
-
-        return null;
+        llamadaPlayer.pause();
+        return;
       }
 
-      return data.recordingUrl;
-    } catch (error) {
+      // ==================================================
+      // ESTE MISMO AUDIO YA ESTÁ CARGADO
+      // ==================================================
+      if (
+        llamadaCargadaIdRef.current === callIdActual &&
+        estadoLlamadaPlayer.isLoaded
+      ) {
+        await setIsAudioActiveAsync(true);
+
+        llamadaPlayer.volume = 1;
+        llamadaPlayer.muted = false;
+
+        const currentTime =
+          estadoLlamadaPlayer.currentTime || 0;
+
+        const duration =
+          estadoLlamadaPlayer.duration || 0;
+
+        const estaAlFinal =
+          duration > 0 &&
+          currentTime >= duration - 0.5;
+
+        if (estaAlFinal) {
+          console.log(
+            "🔄 Reiniciando llamada desde el principio"
+          );
+
+          await llamadaPlayer.seekTo(0);
+        } else {
+          console.log(
+            "▶️ Continuando llamada desde:",
+            currentTime
+          );
+        }
+
+        llamadaPlayer.play();
+
+        return;
+      }
+
+      // ==================================================
+      // ES OTRO SERVICIO -> HAY QUE CARGAR OTRO AUDIO
+      // ==================================================
+
       console.log(
-        "❌ Error obteniendo grabación:",
-        error
+        "🆕 Nueva llamada. Call ID:",
+        callIdActual
       );
 
-      Alert.alert(
-        "Llamada no disponible",
-        "No se pudo obtener la grabación."
-      );
+      try {
+        llamadaPlayer.pause();
+      } catch {
+        // Puede no haber nada reproduciéndose
+      }
 
-      return null;
-    }
-  };
-
-  const escucharLlamadaCliente = async () => {
-    try {
-      const recordingUrl = await obtenerAudioLlamada();
+      const recordingUrl =
+        await obtenerAudioLlamada();
 
       if (!recordingUrl) {
         return;
       }
 
-      console.log("🎧 Reproduciendo llamada:", recordingUrl);
+      console.log(
+        "🎧 Cargando audio del nuevo servicio:",
+        recordingUrl
+      );
 
- //     llamadaPlayer.replace({
- //       uri: recordingUrl,
- //     });
+      await setIsAudioActiveAsync(true);
 
-  //    llamadaPlayer.play();
+      llamadaPlayer.volume = 1;
+      llamadaPlayer.muted = false;
+
+      /*
+       * Guardamos qué llamada estamos cargando.
+       */
+      llamadaCargadaIdRef.current =
+        callIdActual;
+
+      /*
+       * El useEffect que ya tienes hará play()
+       * cuando isLoaded pase a true.
+       */
+      esperandoAudioRef.current = true;
+
+      llamadaPlayer.replace({
+        uri: recordingUrl,
+      });
+
     } catch (error) {
-      console.log("❌ Error reproduciendo llamada:", error);
+      console.log(
+        "❌ Error controlando llamada:",
+        error?.message || error
+      );
 
       Alert.alert(
         "Llamada no disponible",
@@ -606,15 +970,32 @@ export default function InicioScreen() {
 
   const numeroTaxi = taxista?.vehiculo?.numeroTaxi || null;
 
-  if (mostrarChatServicio && servicioActivo?.solicitudId) {
+  if (
+    mostrarChatServicio &&
+    servicioActivo?.solicitudId
+  ) {
     return (
       <ChatTaxistaScreen
-        solicitudId={servicioActivo.solicitudId}
-        clienteNombre={servicioActivo.nombreCliente || "Cliente"}
-        onClose={() => setMostrarChatServicio(false)}
+        solicitudId={
+          servicioActivo.solicitudId
+        }
+        clienteNombre={
+          servicioActivo.nombreCliente ||
+          "Cliente"
+        }
+        onClose={() => {
+          setMostrarChatServicio(false);
+          setMensajesNoLeidos(0);
+        }}
       />
     );
   }
+
+  const llamadaTerminada =
+    estadoLlamadaPlayer.isLoaded &&
+    estadoLlamadaPlayer.duration > 0 &&
+    estadoLlamadaPlayer.currentTime >=
+    estadoLlamadaPlayer.duration - 0.5;
 
   return (
     <SafeAreaView style={styles.appShell} edges={["bottom"]}>
@@ -624,8 +1005,7 @@ export default function InicioScreen() {
           { paddingBottom: Math.max(espacioInferior, 28) },
         ]}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!servicioActivo}
-        bounces={!servicioActivo}
+
       >
         <View style={styles.appCard}>
           <View style={styles.topRow}>
@@ -800,18 +1180,30 @@ export default function InicioScreen() {
                   activeOpacity={0.85}
                 >
                   <Ionicons
-                    name="play-circle-outline"
-                    size={24}
+                    name={
+                      estadoLlamadaPlayer.playing
+                        ? "pause-circle-outline"
+                        : llamadaTerminada
+                          ? "refresh-circle-outline"
+                          : "play-circle-outline"
+                    }
+                    size={26}
                     color="#2563eb"
                   />
 
                   <View style={{ flex: 1 }}>
                     <Text style={styles.llamadaButtonTitle}>
-                      Escuchar llamada
+                      {estadoLlamadaPlayer.playing
+                        ? "Pausar llamada"
+                        : llamadaTerminada
+                          ? "Volver a escuchar"
+                          : estadoLlamadaPlayer.isLoaded
+                            ? "Continuar llamada"
+                            : "Escuchar llamada"}
                     </Text>
 
                     <Text style={styles.llamadaButtonSubtitle}>
-                      Escuchar conversación con el cliente
+                      Conversación con el cliente
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -840,17 +1232,41 @@ export default function InicioScreen() {
               </TouchableOpacity>
             </View>
           )}
-          {/*
           {servicioActivo && (
             <TouchableOpacity
               style={styles.chatButton}
-              onPress={() => setMostrarChatServicio(true)}
+              onPress={() => {
+                setMensajesNoLeidos(0);
+                setMostrarChatServicio(true);
+              }}
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111827" />
-              <Text style={styles.chatButtonText}>Mensaje</Text>
+              <View style={styles.chatIconWrap}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={18}
+                  color="#111827"
+                />
+
+                {mensajesNoLeidos > 0 && (
+                  <View style={styles.chatBadge}>
+                    <Text style={styles.chatBadgeText}>
+                      {mensajesNoLeidos > 9
+                        ? "9+"
+                        : mensajesNoLeidos}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <Text style={styles.chatButtonText}>
+                Mensaje
+              </Text>
+
+              {mensajesNoLeidos > 0 && (
+                <View style={styles.messageDot} />
+              )}
             </TouchableOpacity>
           )}
-          */}
         </View>
       </ScrollView>
       <Modal
@@ -1146,10 +1562,10 @@ const styles = StyleSheet.create({
   },
 
   tarjetaServicio: {
-    marginTop: 18,
-    padding: 18,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
+    marginTop: 14,
+    padding: 14,          // antes 18
+    borderRadius: 18,     // antes 20
+    backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
@@ -1163,7 +1579,7 @@ const styles = StyleSheet.create({
   },
 
   tarjetaServicioTitle: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -1182,29 +1598,29 @@ const styles = StyleSheet.create({
   },
 
   servicioItem: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
 
   servicioLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: "#64748b",
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 2,
   },
 
   servicioValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: "#0f172a",
-    lineHeight: 22,
+    lineHeight: 20,
   },
 
   finishButton: {
-    marginTop: 8,
+    marginTop: 4,
     backgroundColor: "#16a34a",
     borderRadius: 14,
-    paddingVertical: 15,
+    paddingVertical: 12,
     alignItems: "center",
   },
 
@@ -1314,28 +1730,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#fecaca",
     backgroundColor: "#fef2f2",
-    marginTop: 14,
-    marginBottom: 10,
+    marginTop: 8,
+    marginBottom: 8,
   },
 
   llamadaButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginTop: 14,
-    marginBottom: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: "#eff6ff",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
 
   llamadaButtonTitle: {
@@ -1354,5 +1766,40 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     fontSize: 16,
     fontWeight: "600",
+  },
+  chatIconWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  chatBadge: {
+    position: "absolute",
+    top: -7,
+    right: -9,
+
+    minWidth: 18,
+    height: 18,
+
+    borderRadius: 9,
+    backgroundColor: "#ef4444",
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 4,
+  },
+
+  chatBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
+  messageDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
   },
 });

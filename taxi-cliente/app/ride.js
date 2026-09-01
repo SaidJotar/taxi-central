@@ -29,7 +29,12 @@ function formatDist(metros) {
 }
 
 export default function RideScreen() {
-    const { solicitudId } = useLocalSearchParams();
+    const {
+        solicitudId,
+        originalLat,
+        originalLng,
+        originalDireccion,
+    } = useLocalSearchParams();
 
     const mapRef = useRef(null);
     const pollRef = useRef(null);;
@@ -46,6 +51,9 @@ export default function RideScreen() {
 
     const [seguirTaxi, setSeguirTaxi] = useState(true);
     const [ultimoTaxiCoords, setUltimoTaxiCoords] = useState(null);
+
+    const mensajesInicializadosRef = useRef(false);
+    const ultimoMensajeTaxistaRef = useRef(null);
 
     const detenerPolling = useCallback(() => {
         if (pollRef.current) {
@@ -136,54 +144,139 @@ export default function RideScreen() {
         const revisarMensajes = async () => {
             try {
                 const res = await api.getMensajes(solicitud.id);
-                const mensajes = Array.isArray(res?.mensajes) ? res.mensajes : [];
 
-                const mensajesTaxista = mensajes.filter(
-                    (m) => m.emisorTipo === "taxista"
-                );
+                const mensajes =
+                    Array.isArray(res?.mensajes)
+                        ? res.mensajes
+                        : [];
 
-                if (!mensajesTaxista.length) return;
+                const mensajesTaxista =
+                    mensajes.filter(
+                        (m) => m.emisorTipo === "taxista"
+                    );
 
-                const ultimo = mensajesTaxista[mensajesTaxista.length - 1];
+                /*
+                 * Primera comprobación.
+                 *
+                 * Solo guardamos el estado actual.
+                 * NO mostramos mensajes antiguos
+                 * como nuevos.
+                 */
+                if (!mensajesInicializadosRef.current) {
+                    mensajesInicializadosRef.current = true;
 
-                if (!ultimoMensajeLeidoId) {
-                    if (activo) {
-                        setMensajesNoLeidos(0);
-                        setUltimoMensajeLeidoId(ultimo.id);
+                    if (mensajesTaxista.length > 0) {
+                        const ultimo =
+                            mensajesTaxista[
+                            mensajesTaxista.length - 1
+                            ];
+
+                        ultimoMensajeTaxistaRef.current =
+                            ultimo.id;
                     }
+
                     return;
                 }
 
-                const indexLeido = mensajesTaxista.findIndex(
-                    (m) => m.id === ultimoMensajeLeidoId
-                );
+                /*
+                 * Ya estamos inicializados.
+                 *
+                 * Si todavía no había ningún mensaje
+                 * y acaba de llegar el primero,
+                 * ESTE SÍ es nuevo.
+                 */
+                if (
+                    mensajesTaxista.length > 0 &&
+                    !ultimoMensajeTaxistaRef.current
+                ) {
+                    const ultimo =
+                        mensajesTaxista[
+                        mensajesTaxista.length - 1
+                        ];
 
-                if (indexLeido === -1) {
+                    ultimoMensajeTaxistaRef.current =
+                        ultimo.id;
+
                     if (activo) {
-                        setMensajesNoLeidos(mensajesTaxista.length);
+                        setMensajesNoLeidos(
+                            mensajesTaxista.length
+                        );
                     }
+
                     return;
                 }
 
-                const noLeidos = mensajesTaxista.slice(indexLeido + 1).length;
+                if (!mensajesTaxista.length) {
+                    return;
+                }
+
+                const ultimo =
+                    mensajesTaxista[
+                    mensajesTaxista.length - 1
+                    ];
+
+                /*
+                 * No ha llegado nada nuevo.
+                 */
+                if (
+                    ultimo.id ===
+                    ultimoMensajeTaxistaRef.current
+                ) {
+                    return;
+                }
+
+                /*
+                 * Averiguamos cuántos mensajes nuevos
+                 * hay desde el último conocido.
+                 */
+                const indexAnterior =
+                    mensajesTaxista.findIndex(
+                        (m) =>
+                            m.id ===
+                            ultimoMensajeTaxistaRef.current
+                    );
+
+                let nuevos = 1;
+
+                if (indexAnterior >= 0) {
+                    nuevos =
+                        mensajesTaxista.length -
+                        indexAnterior -
+                        1;
+                }
+
+                ultimoMensajeTaxistaRef.current =
+                    ultimo.id;
 
                 if (activo) {
-                    setMensajesNoLeidos(noLeidos);
+                    setMensajesNoLeidos(
+                        (actual) =>
+                            actual + nuevos
+                    );
                 }
+
             } catch (error) {
-                console.log("Error revisando mensajes:", error.message);
+                console.log(
+                    "Error revisando mensajes:",
+                    error.message
+                );
             }
         };
 
         revisarMensajes();
 
-        const interval = setInterval(revisarMensajes, 3000);
+        const interval =
+            setInterval(
+                revisarMensajes,
+                2500
+            );
 
         return () => {
             activo = false;
             clearInterval(interval);
         };
-    }, [solicitud?.id, ultimoMensajeLeidoId]);
+
+    }, [solicitud?.id]);
 
     useEffect(() => {
         if (!taxiCoords) return;
@@ -240,6 +333,30 @@ export default function RideScreen() {
         };
     }, [pickupCoords]);
 
+    function volverInicioLimpio() {
+        router.replace({
+            pathname: "/",
+            params: {
+                reset: "1",
+
+                originalLat:
+                    originalLat
+                        ? String(originalLat)
+                        : "",
+
+                originalLng:
+                    originalLng
+                        ? String(originalLng)
+                        : "",
+
+                originalDireccion:
+                    originalDireccion
+                        ? String(originalDireccion)
+                        : "",
+            },
+        });
+    }
+
     async function cancelarSolicitud() {
         try {
             if (!solicitud?.id) return;
@@ -247,12 +364,32 @@ export default function RideScreen() {
             await api.cancelarSolicitud(solicitud.id);
             detenerPolling();
 
-            Alert.alert("Solicitud cancelada", "Hemos cancelado tu solicitud.", [
-                {
-                    text: "Aceptar",
-                    onPress: () => router.replace("/"),
-                },
-            ]);
+            Alert.alert(
+                "Solicitud cancelada",
+                "Hemos cancelado tu solicitud.",
+                [
+                    {
+                        text: "Aceptar",
+                        onPress: () =>
+                            router.replace({
+                                pathname: "/",
+                                params: {
+                                    lat: solicitud?.latRecogida
+                                        ? String(solicitud.latRecogida)
+                                        : "",
+                                    lng: solicitud?.lngRecogida
+                                        ? String(solicitud.lngRecogida)
+                                        : "",
+                                    direccion:
+                                        solicitud?.direccionBase ||
+                                        solicitud?.direccionRecogida ||
+                                        "",
+                                    reuseLocation: "1",
+                                },
+                            }),
+                    },
+                ]
+            );
         } catch (error) {
             Alert.alert(
                 "No se pudo cancelar",
@@ -284,23 +421,51 @@ export default function RideScreen() {
         if (!solicitud?.id) return;
 
         try {
-            const res = await api.getMensajes(solicitud.id);
-            const mensajes = Array.isArray(res?.mensajes) ? res.mensajes : [];
-            const mensajesTaxista = mensajes.filter((m) => m.emisorTipo === "taxista");
+            const res =
+                await api.getMensajes(
+                    solicitud.id
+                );
+
+            const mensajes =
+                Array.isArray(res?.mensajes)
+                    ? res.mensajes
+                    : [];
+
+            const mensajesTaxista =
+                mensajes.filter(
+                    (m) =>
+                        m.emisorTipo === "taxista"
+                );
 
             if (mensajesTaxista.length) {
-                const ultimo = mensajesTaxista[mensajesTaxista.length - 1];
-                setUltimoMensajeLeidoId(ultimo.id);
+                const ultimo =
+                    mensajesTaxista[
+                    mensajesTaxista.length - 1
+                    ];
+
+                ultimoMensajeTaxistaRef.current =
+                    ultimo.id;
             }
 
+            /*
+             * Al abrir el chat:
+             * todo queda leído.
+             */
             setMensajesNoLeidos(0);
+
         } catch (error) {
-            console.log("Error preparando chat:", error.message);
+            console.log(
+                "Error preparando chat:",
+                error.message
+            );
         }
 
         router.push({
             pathname: "/chat",
-            params: { solicitudId: solicitud.id },
+            params: {
+                solicitudId:
+                    solicitud.id,
+            },
         });
     }
 
@@ -347,218 +512,238 @@ export default function RideScreen() {
 
     return (
         <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-               
-                     <MapView
-                      provider={PROVIDER_GOOGLE}
-                        ref={mapRef}
-                        style={styles.map}
-                        initialRegion={region}
-                        showsUserLocation
-                        showsMyLocationButton={false}
-                        rotateEnabled={false}
-                        
-      >
-               
-                   {pickupCoords && (
-                        <Marker coordinate={pickupCoords} anchor={{ x: 0.5, y: 1 }}>
-                            <View style={styles.pickupMarkerWrap}>
-                                <Ionicons name="location-sharp" size={34} color="#111827" />
-                            </View>
-                        </Marker>
-                    )}
 
-                    {taxiCoords && (
-                        <Marker coordinate={taxiCoords} anchor={{ x: 0.5, y: 0.5 }}>
-                            <View style={styles.taxiMarker}>
-                                <MaterialCommunityIcons name="car-connected" size={20} color="#fff" />
-                            </View>
-                        </Marker>
-                    )}
-                </MapView>
+            <MapView
+                provider={PROVIDER_GOOGLE}
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={region}
+                showsUserLocation
+                showsMyLocationButton={false}
+                rotateEnabled={false}
 
-                {solicitud?.estado !== "asignada" && solicitud?.estado !== "completada" && (
-                    <TouchableOpacity style={styles.backButton} onPress={volverInicio}>
-                        <Ionicons name="chevron-back" size={22} color="#111827" />
-                    </TouchableOpacity>
+            >
+
+                {pickupCoords && (
+                    <Marker coordinate={pickupCoords} anchor={{ x: 0.5, y: 1 }}>
+                        <View style={styles.pickupMarkerWrap}>
+                            <Ionicons name="location-sharp" size={34} color="#111827" />
+                        </View>
+                    </Marker>
                 )}
 
-                <View style={styles.bottomCard}>
-                    <View style={styles.dragHandle} />
+                {taxiCoords && (
+                    <Marker coordinate={taxiCoords} anchor={{ x: 0.5, y: 0.5 }}>
+                        <View style={styles.taxiMarker}>
+                            <MaterialCommunityIcons name="car-connected" size={20} color="#fff" />
+                        </View>
+                    </Marker>
+                )}
+            </MapView>
 
-                    {(solicitud.estado === "pendiente" || solicitud.estado === "ofertada") && (
-                        <>
-                            <Text style={styles.screenTitle}>Buscando taxi</Text>
-                            <Text style={styles.subtitle}>
-                                Estamos avisando a taxistas disponibles cerca de ti.
+            {solicitud?.estado !== "asignada" && solicitud?.estado !== "completada" && (
+                <TouchableOpacity style={styles.backButton} onPress={volverInicio}>
+                    <Ionicons name="chevron-back" size={22} color="#111827" />
+                </TouchableOpacity>
+            )}
+
+            <View style={styles.bottomCard}>
+                <View style={styles.dragHandle} />
+
+                {(solicitud.estado === "pendiente" || solicitud.estado === "ofertada") && (
+                    <>
+                        <Text style={styles.screenTitle}>Buscando taxi</Text>
+                        <Text style={styles.subtitle}>
+                            Estamos avisando a taxistas disponibles cerca de ti.
+                        </Text>
+
+                        <View style={styles.searchingCard}>
+                            <ActivityIndicator size="small" color="#111827" />
+                            <Text style={styles.searchingText}>Esperando aceptación…</Text>
+                        </View>
+
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Recogida</Text>
+                            <Text style={styles.infoValue}>
+                                {solicitud.direccionBase || solicitud.direccionRecogida || "-"}
                             </Text>
+                        </View>
 
-                            <View style={styles.searchingCard}>
-                                <ActivityIndicator size="small" color="#111827" />
-                                <Text style={styles.searchingText}>Esperando aceptación…</Text>
+                        <TouchableOpacity
+                            style={styles.secondaryButton}
+                            onPress={cancelarSolicitud}
+                        >
+                            <Text style={styles.secondaryButtonText}>Cancelar solicitud</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {solicitud.estado === "asignada" && (
+                    <>
+                        <View style={styles.heroRow}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.screenTitle}>Tu taxi viene de camino</Text>
                             </View>
 
-                            <View style={styles.infoCard}>
-                                <Text style={styles.infoLabel}>Recogida</Text>
-                                <Text style={styles.infoValue}>
-                                    {solicitud.direccionBase || solicitud.direccionRecogida || "-"}
+                            <View style={styles.etaBadge}>
+                                <Text style={styles.etaValue}>{etaTexto}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.driverCard}>
+                            <View style={styles.driverAvatar}>
+                                <Ionicons name="person-outline" size={22} color="#111827" />
+                            </View>
+
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.driverName}>
+                                    {solicitud?.taxista?.nombreCompleto || "Taxista asignado"}
                                 </Text>
-                            </View>
 
-                            <TouchableOpacity
-                                style={styles.secondaryButton}
-                                onPress={cancelarSolicitud}
-                            >
-                                <Text style={styles.secondaryButtonText}>Cancelar solicitud</Text>
-                            </TouchableOpacity>
-                        </>
-                    )}
+                                <Text style={styles.driverMeta}>
+                                    {solicitud?.taxista?.numeroTaxi
+                                        ? `Taxi ${solicitud.taxista.numeroTaxi}`
+                                        : "Taxi asignado"}
+                                </Text>
 
-                    {solicitud.estado === "asignada" && (
-                        <>
-                            <View style={styles.heroRow}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.screenTitle}>Tu taxi viene de camino</Text>
-                                </View>
-
-                                <View style={styles.etaBadge}>
-                                    <Text style={styles.etaValue}>{etaTexto}</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.driverCard}>
-                                <View style={styles.driverAvatar}>
-                                    <Ionicons name="person-outline" size={22} color="#111827" />
-                                </View>
-
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.driverName}>
-                                        {solicitud?.taxista?.nombreCompleto || "Taxista asignado"}
-                                    </Text>
-
+                                {(solicitud?.taxista?.marca || solicitud?.taxista?.modelo) && (
                                     <Text style={styles.driverMeta}>
-                                        {solicitud?.taxista?.numeroTaxi
-                                            ? `Taxi ${solicitud.taxista.numeroTaxi}`
-                                            : "Taxi asignado"}
+                                        {[solicitud?.taxista?.marca, solicitud?.taxista?.modelo]
+                                            .filter(Boolean)
+                                            .join(" ")}
                                     </Text>
+                                )}
 
-                                    {(solicitud?.taxista?.marca || solicitud?.taxista?.modelo) && (
-                                        <Text style={styles.driverMeta}>
-                                            {[solicitud?.taxista?.marca, solicitud?.taxista?.modelo]
-                                                .filter(Boolean)
-                                                .join(" ")}
-                                        </Text>
-                                    )}
-
-                                    {!!solicitud?.taxista?.matricula && (
-                                        <Text style={styles.driverMeta}>
-                                            {solicitud.taxista.matricula}
-                                        </Text>
-                                    )}
-                                </View>
+                                {!!solicitud?.taxista?.matricula && (
+                                    <Text style={styles.driverMeta}>
+                                        {solicitud.taxista.matricula}
+                                    </Text>
+                                )}
                             </View>
+                        </View>
 
-                            <View style={styles.infoCard}>
-                                <Text style={styles.infoLabel}>Recogida</Text>
-                                <Text style={styles.infoValue}>
-                                    {solicitud.direccionBase || solicitud.direccionRecogida || "-"}
-                                </Text>
-                            </View>
-
-                            <View style={styles.actionRow}>
-                                <TouchableOpacity style={styles.actionButton} onPress={abrirMensajes}>
-                                    <View style={styles.chatIconWrap}>
-                                        <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111827" />
-
-                                        {mensajesNoLeidos > 0 && (
-                                            <View style={styles.chatBadge}>
-                                                <Text style={styles.chatBadgeText}>
-                                                    {mensajesNoLeidos > 9 ? "9+" : mensajesNoLeidos}
-                                                </Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                    <Text style={styles.actionButtonText}>Mensaje</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </>
-                    )}
-
-                    {solicitud.estado === "sin_taxista" && (
-                        <>
-                            <Text style={styles.screenTitle}>Sin taxis disponibles</Text>
-                            <Text style={styles.subtitle}>
-                                No hay taxis libres ahora mismo. Inténtalo de nuevo más tarde.
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Recogida</Text>
+                            <Text style={styles.infoValue}>
+                                {solicitud.direccionBase || solicitud.direccionRecogida || "-"}
                             </Text>
-                        </>
-                    )}
+                        </View>
 
-                    {solicitud.estado === "cancelada" && (
-                        <>
-                            <Text style={styles.screenTitle}>Solicitud cancelada</Text>
-                            <Text style={styles.subtitle}>Tu solicitud ya no está activa.</Text>
-
-                            <TouchableOpacity style={styles.primaryButton} onPress={volverInicio}>
-                                <Text style={styles.primaryButtonText}>Nueva solicitud</Text>
-                            </TouchableOpacity>
-                        </>
-                    )}
-
-                    {solicitud.estado === "completada" && (
-                        <>
-                            <Text style={styles.screenTitle}>¿Qué tal fue tu viaje?</Text>
-                            <Text style={styles.subtitle}>
-                                Valora tu experiencia con el taxista.
-                            </Text>
-
-                            <View style={styles.ratingRow}>
-                                {[1, 2, 3, 4, 5].map((item) => (
-                                    <TouchableOpacity key={item} onPress={() => setRating(item)}>
-                                        <Ionicons
-                                            name={item <= rating ? "star" : "star-outline"}
-                                            size={30}
-                                            color="#f59e0b"
-                                        />
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-
+                        <View style={styles.actionRow}>
                             <TouchableOpacity
-                                style={[styles.primaryButton, enviandoValoracion && { opacity: 0.7 }]}
-                                disabled={enviandoValoracion}
-                                onPress={async () => {
-                                    try {
-                                        if (!rating) {
-                                            Alert.alert("Valoración", "Selecciona una puntuación");
-                                            return;
-                                        }
-
-                                        setEnviandoValoracion(true);
-
-                                        await api.valorarServicio(solicitud.id, {
-                                            rating,
-                                            comentario,
-                                        });
-
-                                        Alert.alert("Gracias", "Tu valoración se ha guardado", [
-                                            {
-                                                text: "Aceptar",
-                                                onPress: () => volverInicio(),
-                                            },
-                                        ]);
-                                    } catch (error) {
-                                        Alert.alert("Error", error.message || "No se pudo guardar la valoración");
-                                    } finally {
-                                        setEnviandoValoracion(false);
-                                    }
-                                }}
+                                style={styles.actionButton}
+                                onPress={abrirMensajes}
                             >
-                                <Text style={styles.primaryButtonText}>
-                                    {enviandoValoracion ? "Enviando..." : "Enviar valoración"}
+                                <View style={styles.chatIconWrap}>
+
+                                    <Ionicons
+                                        name="chatbubble-ellipses-outline"
+                                        size={18}
+                                        color="#111827"
+                                    />
+
+                                    {mensajesNoLeidos > 0 && (
+                                        <View style={styles.chatBadge}>
+                                            <Text
+                                                style={styles.chatBadgeText}
+                                            >
+                                                {mensajesNoLeidos > 9
+                                                    ? "9+"
+                                                    : mensajesNoLeidos}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                </View>
+
+                                <Text style={styles.actionButtonText}>
+                                    Mensaje
                                 </Text>
+
+                                {mensajesNoLeidos > 0 && (
+                                    <View style={styles.messageDot} />
+                                )}
+
                             </TouchableOpacity>
-                        </>
-                    )}
-                </View>
+                        </View>
+                    </>
+                )}
+
+                {solicitud.estado === "sin_taxista" && (
+                    <>
+                        <Text style={styles.screenTitle}>Sin taxis disponibles</Text>
+                        <Text style={styles.subtitle}>
+                            No hay taxis libres ahora mismo. Inténtalo de nuevo más tarde.
+                        </Text>
+                    </>
+                )}
+
+                {solicitud.estado === "cancelada" && (
+                    <>
+                        <Text style={styles.screenTitle}>Solicitud cancelada</Text>
+                        <Text style={styles.subtitle}>Tu solicitud ya no está activa.</Text>
+
+                        <TouchableOpacity style={styles.primaryButton} onPress={volverInicio}>
+                            <Text style={styles.primaryButtonText}>Nueva solicitud</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {solicitud.estado === "completada" && (
+                    <>
+                        <Text style={styles.screenTitle}>¿Qué tal fue tu viaje?</Text>
+                        <Text style={styles.subtitle}>
+                            Valora tu experiencia con el taxista.
+                        </Text>
+
+                        <View style={styles.ratingRow}>
+                            {[1, 2, 3, 4, 5].map((item) => (
+                                <TouchableOpacity key={item} onPress={() => setRating(item)}>
+                                    <Ionicons
+                                        name={item <= rating ? "star" : "star-outline"}
+                                        size={30}
+                                        color="#f59e0b"
+                                    />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.primaryButton, enviandoValoracion && { opacity: 0.7 }]}
+                            disabled={enviandoValoracion}
+                            onPress={async () => {
+                                try {
+                                    if (!rating) {
+                                        Alert.alert("Valoración", "Selecciona una puntuación");
+                                        return;
+                                    }
+
+                                    setEnviandoValoracion(true);
+
+                                    await api.valorarServicio(solicitud.id, {
+                                        rating,
+                                        comentario,
+                                    });
+                                    Alert.alert("Gracias", "Tu valoración se ha guardado", [
+                                        {
+                                            text: "Aceptar",
+                                            onPress: () => volverInicioLimpio(),
+                                        },
+                                    ]);
+                                } catch (error) {
+                                    Alert.alert("Error", error.message || "No se pudo guardar la valoración");
+                                } finally {
+                                    setEnviandoValoracion(false);
+                                }
+                            }}
+                        >
+                            <Text style={styles.primaryButtonText}>
+                                {enviandoValoracion ? "Enviando..." : "Enviar valoración"}
+                            </Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+            </View>
         </SafeAreaView>
     );
 }
@@ -905,5 +1090,17 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: "700",
         color: "#111827",
+    },
+    messageLabelRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+
+    messageDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: "#ef4444",
     },
 });
