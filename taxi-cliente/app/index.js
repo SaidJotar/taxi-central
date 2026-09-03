@@ -296,8 +296,23 @@ export default function HomeScreen() {
 
     }, []);
 
+  /*
+   * =====================================================
+   * AUTOCOMPLETE DIRECCIÓN
+   * =====================================================
+   *
+   * - mínimo 5 caracteres
+   * - debounce 450 ms
+   * - Places API New en backend
+   *
+   */
+
   useEffect(() => {
 
+    /*
+     * Si no estamos cambiando
+     * la recogida no buscamos nada.
+     */
     if (
       !cambiandoRecogida
     ) {
@@ -306,29 +321,65 @@ export default function HomeScreen() {
         []
       );
 
+
       setBusquedaDireccion(
         ""
       );
 
+
+      setBuscandoDireccion(
+        false
+      );
+
+
       return;
+
     }
 
 
     const texto =
-      busquedaDireccion.trim();
+      busquedaDireccion
+        .trim();
 
+
+    /*
+     * =====================================================
+     * MÍNIMO 5 CARACTERES
+     * =====================================================
+     */
 
     if (
-      texto.length < 2
+      texto.length < 5
     ) {
 
       setSugerenciasDireccion(
         []
       );
 
+
+      setBuscandoDireccion(
+        false
+      );
+
+
       return;
+
     }
 
+
+    /*
+     * =====================================================
+     * DEBOUNCE
+     * =====================================================
+     *
+     * Esperamos 450 ms desde la última tecla.
+     *
+     * Así:
+     *
+     * Calle...
+     *
+     * no provoca una petición por cada letra.
+     */
 
     const timeout =
       setTimeout(
@@ -348,11 +399,15 @@ export default function HomeScreen() {
 
 
             setSugerenciasDireccion(
+
               Array.isArray(
                 res?.resultados
               )
+
                 ? res.resultados
+
                 : []
+
             );
 
 
@@ -378,22 +433,39 @@ export default function HomeScreen() {
           }
 
         },
-        350
+
+        450
+
       );
 
 
-    return () =>
+    return () => {
+
       clearTimeout(
         timeout
       );
 
+    };
+
+
   }, [
+
     busquedaDireccion,
+
     cambiandoRecogida,
+
   ]);
+
+
+  /*
+   * =====================================================
+   * SELECCIONAR SUGERENCIA
+   * =====================================================
+   */
 
   const seleccionarDireccionSugerida =
     useCallback(
+
       async (
         sugerencia
       ) => {
@@ -403,7 +475,9 @@ export default function HomeScreen() {
           if (
             !sugerencia?.placeId
           ) {
+
             return;
+
           }
 
 
@@ -415,6 +489,12 @@ export default function HomeScreen() {
           Keyboard.dismiss();
 
 
+          /*
+           * Pedimos las coordenadas únicamente
+           * después de que el usuario haya
+           * elegido una dirección.
+           */
+
           const res =
             await api.detalleDireccion(
               sugerencia.placeId
@@ -424,10 +504,14 @@ export default function HomeScreen() {
           if (
             !res?.ok ||
             !Number.isFinite(
-              Number(res.lat)
+              Number(
+                res.lat
+              )
             ) ||
             !Number.isFinite(
-              Number(res.lng)
+              Number(
+                res.lng
+              )
             )
           ) {
 
@@ -443,11 +527,18 @@ export default function HomeScreen() {
               res.lat
             );
 
+
           const longitude =
             Number(
               res.lng
             );
 
+
+          /*
+           * =================================================
+           * ACTUALIZAR RECOGIDA
+           * =================================================
+           */
 
           setPickup({
 
@@ -455,16 +546,26 @@ export default function HomeScreen() {
 
             longitude,
 
+
             direccionRecogida:
               res.direccion ||
-              sugerencia.descripcion,
+              sugerencia.texto ||
+              sugerencia.descripcion ||
+              "Ubicación seleccionada",
+
 
             direccionBase:
               res.direccion ||
-              sugerencia.descripcion,
+              sugerencia.texto ||
+              sugerencia.descripcion ||
+              "Ubicación seleccionada",
 
           });
 
+
+          /*
+           * Limpiamos búsqueda.
+           */
 
           setBusquedaDireccion(
             ""
@@ -475,6 +576,11 @@ export default function HomeScreen() {
             []
           );
 
+
+          /*
+           * Centramos el mapa en
+           * la dirección elegida.
+           */
 
           mapRef.current
             ?.animateToRegion(
@@ -491,16 +597,27 @@ export default function HomeScreen() {
                   0.006,
 
               },
+
               350
+
             );
 
 
         } catch (error) {
 
+          console.log(
+            "Error seleccionando dirección:",
+            error
+          );
+
+
           Alert.alert(
+
             "Dirección",
+
             error.message ||
             "No se pudo seleccionar la dirección."
+
           );
 
 
@@ -513,7 +630,9 @@ export default function HomeScreen() {
         }
 
       },
+
       []
+
     );
 
 
@@ -1816,16 +1935,17 @@ export default function HomeScreen() {
                   setBusquedaDireccion
                 }
 
-                placeholder="Escribe una dirección en Ceuta"
+                placeholder="Escribe al menos 5 caracteres"
 
                 placeholderTextColor="#94a3b8"
 
                 autoCorrect={false}
 
+                autoCapitalize="words"
+
                 returnKeyType="search"
 
               />
-
 
               {buscandoDireccion ? (
 
@@ -1861,6 +1981,19 @@ export default function HomeScreen() {
               ) : null}
 
             </View>
+
+            {busquedaDireccion.length > 0 &&
+              busquedaDireccion.trim().length < 5 && (
+
+                <Text
+                  style={
+                    styles.minCharsText
+                  }
+                >
+                  Escribe al menos 5 caracteres para buscar.
+                </Text>
+
+              )}
 
 
             {sugerenciasDireccion.length >
@@ -2044,12 +2177,43 @@ export default function HomeScreen() {
 
 
               {!cambiandoRecogida && (
-
                 <TouchableOpacity
-                  style={styles.changePickupSmall}
-                  onPress={() =>
-                    setCambiandoRecogida(true)
+
+                  style={
+                    styles.changePickupSmall
                   }
+
+                  onPress={() => {
+
+                    /*
+                     * Cada vez que entra a cambiar
+                     * dirección empezamos limpio.
+                     */
+
+                    setBusquedaDireccion(
+                      ""
+                    );
+
+
+                    setSugerenciasDireccion(
+                      []
+                    );
+
+
+                    setBuscandoDireccion(
+                      false
+                    );
+
+
+                    Keyboard.dismiss();
+
+
+                    setCambiandoRecogida(
+                      true
+                    );
+
+                  }}
+
                 >
                   <Text style={styles.changePickupSmallText}>
                     Cambiar
@@ -3174,6 +3338,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
 
     color: "#111827",
+  },
+
+  minCharsText: {
+
+    marginTop: 5,
+
+    marginLeft: 4,
+
+    fontSize: 11,
+
+    color: "#64748b",
+
+    fontWeight: "600",
+
   },
 
   suggestionsBox: {

@@ -1076,6 +1076,19 @@ router.get(
     }
 );
 
+/*
+|--------------------------------------------------------------------------
+| DIRECCIONES - AUTOCOMPLETE PLACES API (NEW)
+|--------------------------------------------------------------------------
+|
+| - Places API (New)
+| - Mínimo 5 caracteres
+| - Máximo 5 resultados
+| - Prioridad a Ceuta
+| - Sin Places Legacy
+|
+*/
+
 router.get(
     "/direcciones/autocomplete",
     async (req, res) => {
@@ -1088,8 +1101,14 @@ router.get(
                 ).trim();
 
 
+            /*
+             * =====================================================
+             * MÍNIMO 5 CARACTERES
+             * =====================================================
+             */
+
             if (
-                texto.length < 2
+                texto.length < 5
             ) {
 
                 return res.json({
@@ -1099,6 +1118,12 @@ router.get(
 
             }
 
+
+            /*
+             * =====================================================
+             * API KEY
+             * =====================================================
+             */
 
             const apiKey =
                 process.env.GOOGLE_MAPS_API_KEY;
@@ -1116,32 +1141,87 @@ router.get(
 
 
             /*
-             * Limitamos la búsqueda a Ceuta.
+             * =====================================================
+             * PETICIÓN PLACES API (NEW)
+             * =====================================================
              */
-            const params =
-                new URLSearchParams({
 
-                    input:
-                        texto,
+            const body = {
 
-                    key:
-                        apiKey,
+                input:
+                    texto,
 
-                    language:
-                        "es",
+                languageCode:
+                    "es",
 
-                    components:
-                        "country:es",
+                regionCode:
+                    "ES",
 
-                    locationbias:
-                        "circle:15000@35.8894,-5.3213",
 
-                });
+                /*
+                 * Limitamos el país.
+                 */
+                includedRegionCodes: [
+                    "es",
+                ],
+
+
+                /*
+                 * Priorizamos resultados cercanos
+                 * al centro de Ceuta.
+                 *
+                 * No es una frontera dura.
+                 * La comprobación definitiva se
+                 * hace en Place Details.
+                 */
+                locationBias: {
+
+                    circle: {
+
+                        center: {
+
+                            latitude:
+                                35.8894,
+
+                            longitude:
+                                -5.3213,
+
+                        },
+
+                        radius:
+                            15000,
+
+                    },
+
+                },
+
+            };
 
 
             const response =
                 await fetch(
-                    `https://maps.googleapis.com/maps/api/place/autocomplete/json?${params.toString()}`
+                    "https://places.googleapis.com/v1/places:autocomplete",
+                    {
+
+                        method:
+                            "POST",
+
+                        headers: {
+
+                            "Content-Type":
+                                "application/json",
+
+                            "X-Goog-Api-Key":
+                                apiKey,
+
+                        },
+
+                        body:
+                            JSON.stringify(
+                                body
+                            ),
+
+                    }
                 );
 
 
@@ -1149,14 +1229,16 @@ router.get(
                 await response.json();
 
 
-            if (
-                data.status !== "OK" &&
-                data.status !==
-                "ZERO_RESULTS"
-            ) {
+            /*
+             * =====================================================
+             * ERROR GOOGLE
+             * =====================================================
+             */
+
+            if (!response.ok) {
 
                 console.error(
-                    "Google Autocomplete:",
+                    "❌ Places Autocomplete New:",
                     data
                 );
 
@@ -1170,35 +1252,88 @@ router.get(
             }
 
 
+            /*
+             * =====================================================
+             * NORMALIZAMOS RESULTADOS
+             * =====================================================
+             */
+
             const resultados =
-                (data.predictions || [])
-                    .slice(0, 6)
+                (data.suggestions || [])
+
                     .map(
-                        (item) => ({
+                        (item) => {
 
-                            placeId:
-                                item.place_id,
+                            const prediccion =
+                                item.placePrediction;
 
-                            descripcion:
-                                item.description,
 
-                            principal:
-                                item.structured_formatting
-                                    ?.main_text ||
-                                item.description,
+                            if (
+                                !prediccion?.placeId
+                            ) {
 
-                            secundaria:
-                                item.structured_formatting
-                                    ?.secondary_text ||
-                                "",
+                                return null;
 
-                        })
+                            }
+
+
+                            const descripcion =
+                                prediccion.text?.text ||
+                                "";
+
+
+                            return {
+
+                                placeId:
+                                    prediccion.placeId,
+
+
+                                /*
+                                 * Conservamos "descripcion"
+                                 * para que index.js siga siendo
+                                 * compatible.
+                                 */
+                                descripcion,
+
+
+                                texto:
+                                    descripcion,
+
+
+                                principal:
+                                    prediccion
+                                        .structuredFormat
+                                        ?.mainText
+                                        ?.text ||
+                                    descripcion,
+
+
+                                secundaria:
+                                    prediccion
+                                        .structuredFormat
+                                        ?.secondaryText
+                                        ?.text ||
+                                    "",
+
+                            };
+
+                        }
+                    )
+
+                    .filter(Boolean)
+
+                    .slice(
+                        0,
+                        5
                     );
 
 
             return res.json({
+
                 ok: true,
+
                 resultados,
+
             });
 
 
@@ -1221,16 +1356,48 @@ router.get(
     }
 );
 
+
+/*
+|--------------------------------------------------------------------------
+| DIRECCIONES - PLACE DETAILS PLACES API (NEW)
+|--------------------------------------------------------------------------
+|
+| Al seleccionar una sugerencia obtenemos:
+|
+| - dirección
+| - latitud
+| - longitud
+|
+| No pedimos:
+|
+| - fotos
+| - horarios
+| - reseñas
+| - teléfonos
+| - web
+|
+| para no elevar innecesariamente el SKU.
+|
+*/
+
 router.get(
     "/direcciones/place/:placeId",
     async (req, res) => {
 
         try {
 
-            const {
-                placeId,
-            } = req.params;
+            const placeId =
+                String(
+                    req.params.placeId ||
+                    ""
+                ).trim();
 
+
+            /*
+             * =====================================================
+             * PLACE ID
+             * =====================================================
+             */
 
             if (!placeId) {
 
@@ -1243,31 +1410,79 @@ router.get(
             }
 
 
+            /*
+             * =====================================================
+             * API KEY
+             * =====================================================
+             */
+
             const apiKey =
                 process.env.GOOGLE_MAPS_API_KEY;
 
 
+            if (!apiKey) {
+
+                return res.status(500).json({
+                    ok: false,
+                    error:
+                        "Google Maps no está configurado.",
+                });
+
+            }
+
+
+            /*
+             * =====================================================
+             * PARÁMETROS
+             * =====================================================
+             */
+
             const params =
                 new URLSearchParams({
 
-                    place_id:
-                        placeId,
-
-                    key:
-                        apiKey,
-
-                    language:
+                    languageCode:
                         "es",
 
-                    fields:
-                        "formatted_address,geometry,name",
+                    regionCode:
+                        "ES",
 
                 });
 
 
+            /*
+             * =====================================================
+             * PLACE DETAILS NEW
+             * =====================================================
+             */
+
             const response =
                 await fetch(
-                    `https://maps.googleapis.com/maps/api/place/details/json?${params.toString()}`
+
+                    `https://places.googleapis.com/v1/places/${encodeURIComponent(
+                        placeId
+                    )}?${params.toString()}`,
+
+                    {
+
+                        method:
+                            "GET",
+
+                        headers: {
+
+                            "X-Goog-Api-Key":
+                                apiKey,
+
+
+                            /*
+                             * Solo pedimos lo que necesitamos.
+                             */
+                            "X-Goog-FieldMask":
+                                "id,formattedAddress,location",
+
+                        },
+
+                    }
+
                 );
 
 
@@ -1275,10 +1490,22 @@ router.get(
                 await response.json();
 
 
+            /*
+             * =====================================================
+             * ERROR GOOGLE
+             * =====================================================
+             */
+
             if (
-                data.status !== "OK" ||
-                !data.result?.geometry?.location
+                !response.ok ||
+                !data?.location
             ) {
+
+                console.error(
+                    "❌ Place Details New:",
+                    data
+                );
+
 
                 return res.status(404).json({
                     ok: false,
@@ -1289,21 +1516,52 @@ router.get(
             }
 
 
+            /*
+             * =====================================================
+             * COORDENADAS
+             * =====================================================
+             */
+
             const lat =
                 Number(
-                    data.result.geometry.location.lat
+                    data.location.latitude
                 );
+
 
             const lng =
                 Number(
-                    data.result.geometry.location.lng
+                    data.location.longitude
                 );
 
 
+            if (
+                !Number.isFinite(
+                    lat
+                ) ||
+                !Number.isFinite(
+                    lng
+                )
+            ) {
+
+                return res.status(404).json({
+                    ok: false,
+                    error:
+                        "La dirección no tiene coordenadas válidas.",
+                });
+
+            }
+
+
             /*
-             * Evitamos permitir direcciones
-             * claramente fuera de Ceuta.
+             * =====================================================
+             * COMPROBACIÓN CEUTA
+             * =====================================================
+             *
+             * Autocomplete solamente prioriza Ceuta.
+             *
+             * Aquí ponemos la frontera real.
              */
+
             const distanciaCeuta =
                 distanciaMetros(
                     35.8894,
@@ -1327,18 +1585,31 @@ router.get(
             }
 
 
+            /*
+             * =====================================================
+             * RESPUESTA
+             * =====================================================
+             */
+
             return res.json({
 
                 ok: true,
 
+
                 direccion:
-                    data.result
-                        .formatted_address ||
-                    data.result.name ||
-                    "",
+                    data.formattedAddress ||
+                    "Ubicación seleccionada",
+
 
                 lat,
+
+
                 lng,
+
+
+                placeId:
+                    data.id ||
+                    placeId,
 
             });
 
