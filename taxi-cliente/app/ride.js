@@ -814,23 +814,20 @@ export default function RideScreen() {
                     </Marker>
                 )}
 
-                {rutaCoords.length > 1 && (
+                {solicitud?.faseServicio !==
+                    "en_viaje" &&
+                    rutaCoords.length > 1 && (
 
-                    <Polyline
+                        <Polyline
+                            coordinates={
+                                rutaCoords
+                            }
+                            strokeWidth={5}
+                            lineCap="round"
+                            lineJoin="round"
+                        />
 
-                        coordinates={
-                            rutaCoords
-                        }
-
-                        strokeWidth={5}
-
-                        lineCap="round"
-
-                        lineJoin="round"
-
-                    />
-
-                )}
+                    )}
 
                 {taxiCoords && (
                     <Marker coordinate={taxiCoords} anchor={{ x: 0.5, y: 0.5 }}>
@@ -883,16 +880,33 @@ export default function RideScreen() {
                         <View style={styles.heroRow}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.screenTitle}>
-                                    {solicitud?.etaEstado === "llegado"
-                                        ? "Tu taxi ya ha llegado"
-                                        : solicitud?.etaEstado === "cerca"
-                                            ? "Tu taxi está a punto de llegar"
-                                            : "Tu taxi viene de camino"}
+
+                                    {solicitud?.faseServicio ===
+                                        "en_viaje"
+                                        ? "Viaje en curso"
+
+                                        : solicitud?.faseServicio ===
+                                            "esperando_cliente"
+                                            ? "Tu taxi ya ha llegado"
+
+                                            : solicitud?.etaEstado ===
+                                                "cerca"
+                                                ? "Tu taxi está a punto de llegar"
+
+                                                : "Tu taxi viene de camino"}
+
                                 </Text>
                             </View>
 
                             <View style={styles.etaBadge}>
-                                <Text style={styles.etaValue}>{etaTexto}</Text>
+                                {solicitud?.faseServicio !==
+                                    "en_viaje" && (
+
+                                        <Text style={styles.etaValue}>
+                                            {etaTexto}
+                                        </Text>
+
+                                    )}
                             </View>
                         </View>
 

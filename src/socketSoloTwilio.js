@@ -1200,6 +1200,248 @@ function iniciarSocket(server) {
       }
     });
 
+    socket.on(
+      "servicio:cliente_recogido",
+      async ({ solicitudId }, callback) => {
+
+        try {
+
+          const taxistaId =
+            socket.taxistaAuth?.taxistaId;
+
+
+          if (
+            !taxistaId ||
+            !solicitudId
+          ) {
+
+            const respuesta = {
+              ok: false,
+              error:
+                "Faltan datos del servicio",
+            };
+
+
+            if (
+              typeof callback ===
+              "function"
+            ) {
+              callback(
+                respuesta
+              );
+            }
+
+
+            return;
+          }
+
+
+          /*
+           * Comprobamos que el servicio pertenece
+           * realmente a este taxista.
+           */
+          const solicitud =
+            await prisma.solicitudViaje.findFirst({
+
+              where: {
+
+                id:
+                  solicitudId,
+
+                estado:
+                  "asignada",
+
+                asignacion: {
+                  is: {
+                    taxistaId,
+                  },
+                },
+
+              },
+
+              include: {
+
+                asignacion: {
+                  include: {
+                    taxista: {
+                      include: {
+                        vehiculo: true,
+                      },
+                    },
+                  },
+                },
+
+              },
+
+            });
+
+
+          if (!solicitud) {
+
+            const respuesta = {
+              ok: false,
+              error:
+                "Servicio no encontrado o no pertenece al taxista",
+            };
+
+
+            if (
+              typeof callback ===
+              "function"
+            ) {
+              callback(
+                respuesta
+              );
+            }
+
+
+            return;
+          }
+
+
+          /*
+           * Si ya estaba iniciado, no repetimos nada.
+           */
+          if (
+            solicitud.recogidaIniciadaEn
+          ) {
+
+            const respuesta = {
+              ok: true,
+
+              yaIniciado:
+                true,
+
+              recogidaIniciadaEn:
+                solicitud.recogidaIniciadaEn,
+            };
+
+
+            if (
+              typeof callback ===
+              "function"
+            ) {
+              callback(
+                respuesta
+              );
+            }
+
+
+            return;
+          }
+
+
+          const actualizada =
+            await prisma.solicitudViaje.update({
+
+              where: {
+                id:
+                  solicitudId,
+              },
+
+              data: {
+                recogidaIniciadaEn:
+                  new Date(),
+              },
+
+            });
+
+
+          console.log(
+            "🚕 Cliente recogido:",
+            {
+              solicitudId,
+              taxistaId,
+
+              recogidaIniciadaEn:
+                actualizada.recogidaIniciadaEn,
+            }
+          );
+
+
+          /*
+           * Actualizamos al propio taxista.
+           */
+          socket.emit(
+            "servicio:cliente_recogido_ok",
+            {
+              ok: true,
+
+              solicitudId,
+
+              recogidaIniciadaEn:
+                actualizada.recogidaIniciadaEn,
+            }
+          );
+
+
+          /*
+           * Si luego quieres usar socket directo
+           * en cliente, ya dejamos este evento preparado.
+           */
+          if (io) {
+
+            io.to(
+              `solicitud:${solicitudId}`
+            ).emit(
+              "servicio:recogida_iniciada",
+              {
+                ok: true,
+
+                solicitudId,
+
+                recogidaIniciadaEn:
+                  actualizada.recogidaIniciadaEn,
+              }
+            );
+
+          }
+
+
+          if (
+            typeof callback ===
+            "function"
+          ) {
+
+            callback({
+              ok: true,
+
+              solicitudId,
+
+              recogidaIniciadaEn:
+                actualizada.recogidaIniciadaEn,
+            });
+
+          }
+
+
+        } catch (error) {
+
+          console.error(
+            "Error servicio:cliente_recogido:",
+            error
+          );
+
+
+          if (
+            typeof callback ===
+            "function"
+          ) {
+
+            callback({
+              ok: false,
+              error:
+                error.message ||
+                "No se pudo iniciar el trayecto",
+            });
+
+          }
+
+        }
+
+      }
+    );
+
     socket.on("servicio:terminar", async ({ solicitudId, costoFinal }) => {
       try {
         const taxistaId = socket.taxistaAuth?.taxistaId;

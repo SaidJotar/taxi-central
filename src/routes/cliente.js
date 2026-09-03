@@ -422,6 +422,7 @@ router.get("/estado/:id", async (req, res) => {
          */
 
         if (
+            !solicitud.recogidaIniciadaEn &&
             taxista &&
             solicitud.latRecogida != null &&
             solicitud.lngRecogida != null &&
@@ -918,6 +919,16 @@ router.get("/estado/:id", async (req, res) => {
                 etaFuente,
                 etaTexto,
                 etaEstado,
+                recogidaIniciadaEn:
+                    solicitud.recogidaIniciadaEn || null,
+                faseServicio:
+                    solicitud.estado === "completada"
+                        ? "completado"
+                        : solicitud.recogidaIniciadaEn
+                            ? "en_viaje"
+                            : etaEstado === "llegado"
+                                ? "esperando_cliente"
+                                : "hacia_recogida",
                 rutaPolyline: rutaPolyline || null,
                 taxista: taxista
                     ? {

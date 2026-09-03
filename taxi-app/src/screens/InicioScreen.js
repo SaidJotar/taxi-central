@@ -1193,6 +1193,88 @@ export default function InicioScreen() {
     }
   };
 
+  const confirmarClienteRecogido = () => {
+
+    if (
+      !servicioActivo?.solicitudId
+    ) {
+      return;
+    }
+
+
+    Alert.alert(
+      "Cliente recogido",
+      "¿Confirmas que el cliente ya está dentro del taxi?",
+      [
+        {
+          text:
+            "Cancelar",
+
+          style:
+            "cancel",
+        },
+
+        {
+          text:
+            "Sí, iniciar trayecto",
+
+          onPress: () => {
+
+            socket.emit(
+              "servicio:cliente_recogido",
+              {
+                solicitudId:
+                  servicioActivo.solicitudId,
+              },
+              (respuesta) => {
+
+                if (
+                  !respuesta?.ok
+                ) {
+
+                  Alert.alert(
+                    "Error",
+                    respuesta?.error ||
+                    "No se pudo iniciar el trayecto."
+                  );
+
+                  return;
+                }
+
+
+                /*
+                 * Actualizamos inmediatamente
+                 * la tarjeta local.
+                 */
+                const actualizado = {
+
+                  ...servicioActivo,
+
+                  recogidaIniciadaEn:
+                    respuesta
+                      .recogidaIniciadaEn,
+
+                };
+
+
+                servicioActivoRef.current =
+                  actualizado;
+
+
+                setServicioActivo(
+                  actualizado
+                );
+
+              }
+            );
+
+          },
+        },
+      ]
+    );
+
+  };
+
   const abrirCerrarServicio = () => {
     if (!servicioActivo?.solicitudId) return;
     setCostoFinalInput("");
@@ -2156,37 +2238,123 @@ export default function InicioScreen() {
                 }
               >
 
-                <TouchableOpacity
+                {!servicioActivo?.recogidaIniciadaEn ? (
 
-                  style={
-                    styles.clienteNoLocalizadoButton
-                  }
+                  <>
+                    <TouchableOpacity
+                      style={
+                        styles.clienteRecogidoButton
+                      }
+                      onPress={
+                        confirmarClienteRecogido
+                      }
+                    >
 
-                  onPress={
-                    clienteNoLocalizado
-                  }
+                      <Ionicons
+                        name="person-circle-outline"
+                        size={21}
+                        color="#ffffff"
+                      />
 
-                  activeOpacity={0.85}
+                      <Text
+                        style={
+                          styles.clienteRecogidoText
+                        }
+                      >
+                        Cliente recogido
+                      </Text>
 
-                >
-
-                  <Ionicons
-                    name="person-remove-outline"
-                    size={17}
-                    color="#b91c1c"
-                  />
+                    </TouchableOpacity>
 
 
-                  <Text
+                    <TouchableOpacity
+                      style={
+                        styles.clienteNoLocalizadoButton
+                      }
+                      onPress={
+                        clienteNoLocalizado
+                      }
+                    >
+
+                      <Ionicons
+                        name="person-remove-outline"
+                        size={20}
+                        color="#b91c1c"
+                      />
+
+                      <Text
+                        style={
+                          styles.clienteNoLocalizadoText
+                        }
+                      >
+                        Cliente no localizado
+                      </Text>
+
+                    </TouchableOpacity>
+
+                  </>
+
+                ) : (
+
+                  <View
                     style={
-                      styles.clienteNoLocalizadoText
+                      styles.trayectoActivoBox
                     }
                   >
-                    No localizado
-                  </Text>
 
-                </TouchableOpacity>
+                    <Ionicons
+                      name="navigate-circle-outline"
+                      size={22}
+                      color="#166534"
+                    />
 
+                    <View style={{ flex: 1 }}>
+
+                      <Text
+                        style={
+                          styles.trayectoActivoTitle
+                        }
+                      >
+                        Trayecto iniciado
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.trayectoActivoSubtitle
+                        }
+                      >
+                        El cliente ya está a bordo.
+                      </Text>
+
+                    </View>
+
+                  </View>
+
+                )}
+
+
+                {servicioActivo?.recogidaIniciadaEn && (
+
+                  <TouchableOpacity
+                    style={
+                      styles.finishButton
+                    }
+                    onPress={
+                      abrirCerrarServicio
+                    }
+                  >
+
+                    <Text
+                      style={
+                        styles.finishButtonText
+                      }
+                    >
+                      Finalizar servicio
+                    </Text>
+
+                  </TouchableOpacity>
+
+                )}
 
                 <TouchableOpacity
 
@@ -3656,6 +3824,113 @@ const styles =
       fontWeight: "700",
 
       color: "#64748b",
+    },
+
+    clienteRecogidoButton: {
+
+      marginTop: 12,
+
+      minHeight: 52,
+
+      borderRadius: 16,
+
+      backgroundColor:
+        "#111827",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap:
+        8,
+
+      paddingHorizontal:
+        14,
+
+    },
+
+    clienteRecogidoText: {
+
+      color:
+        "#ffffff",
+
+      fontSize:
+        15,
+
+      fontWeight:
+        "800",
+
+    },
+
+    trayectoActivoBox: {
+
+      marginTop:
+        12,
+
+      minHeight:
+        58,
+
+      borderRadius:
+        16,
+
+      backgroundColor:
+        "#f0fdf4",
+
+      borderWidth:
+        1,
+
+      borderColor:
+        "#bbf7d0",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap:
+        10,
+
+      paddingHorizontal:
+        14,
+
+      paddingVertical:
+        10,
+
+    },
+
+    trayectoActivoTitle: {
+
+      color:
+        "#166534",
+
+      fontSize:
+        14,
+
+      fontWeight:
+        "800",
+
+    },
+
+    trayectoActivoSubtitle: {
+
+      marginTop:
+        2,
+
+      color:
+        "#4b5563",
+
+      fontSize:
+        12,
+
+      fontWeight:
+        "600",
+
     },
 
   });
