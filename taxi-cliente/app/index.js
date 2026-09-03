@@ -115,6 +115,26 @@ export default function HomeScreen() {
   const [cambiandoRecogida, setCambiandoRecogida] =
     useState(false);
 
+  const [
+    busquedaDireccion,
+    setBusquedaDireccion,
+  ] = useState("");
+
+  const [
+    sugerenciasDireccion,
+    setSugerenciasDireccion,
+  ] = useState([]);
+
+  const [
+    buscandoDireccion,
+    setBuscandoDireccion,
+  ] = useState(false);
+
+  const [
+    seleccionandoDireccion,
+    setSeleccionandoDireccion,
+  ] = useState(false);
+
 
   /*
    * REFERENCIA
@@ -275,6 +295,226 @@ export default function HomeScreen() {
       }
 
     }, []);
+
+  useEffect(() => {
+
+    if (
+      !cambiandoRecogida
+    ) {
+
+      setSugerenciasDireccion(
+        []
+      );
+
+      setBusquedaDireccion(
+        ""
+      );
+
+      return;
+    }
+
+
+    const texto =
+      busquedaDireccion.trim();
+
+
+    if (
+      texto.length < 2
+    ) {
+
+      setSugerenciasDireccion(
+        []
+      );
+
+      return;
+    }
+
+
+    const timeout =
+      setTimeout(
+        async () => {
+
+          try {
+
+            setBuscandoDireccion(
+              true
+            );
+
+
+            const res =
+              await api.buscarDirecciones(
+                texto
+              );
+
+
+            setSugerenciasDireccion(
+              Array.isArray(
+                res?.resultados
+              )
+                ? res.resultados
+                : []
+            );
+
+
+          } catch (error) {
+
+            console.log(
+              "Error buscando direcciones:",
+              error.message
+            );
+
+
+            setSugerenciasDireccion(
+              []
+            );
+
+
+          } finally {
+
+            setBuscandoDireccion(
+              false
+            );
+
+          }
+
+        },
+        350
+      );
+
+
+    return () =>
+      clearTimeout(
+        timeout
+      );
+
+  }, [
+    busquedaDireccion,
+    cambiandoRecogida,
+  ]);
+
+  const seleccionarDireccionSugerida =
+    useCallback(
+      async (
+        sugerencia
+      ) => {
+
+        try {
+
+          if (
+            !sugerencia?.placeId
+          ) {
+            return;
+          }
+
+
+          setSeleccionandoDireccion(
+            true
+          );
+
+
+          Keyboard.dismiss();
+
+
+          const res =
+            await api.detalleDireccion(
+              sugerencia.placeId
+            );
+
+
+          if (
+            !res?.ok ||
+            !Number.isFinite(
+              Number(res.lat)
+            ) ||
+            !Number.isFinite(
+              Number(res.lng)
+            )
+          ) {
+
+            throw new Error(
+              "No se pudo localizar esa dirección."
+            );
+
+          }
+
+
+          const latitude =
+            Number(
+              res.lat
+            );
+
+          const longitude =
+            Number(
+              res.lng
+            );
+
+
+          setPickup({
+
+            latitude,
+
+            longitude,
+
+            direccionRecogida:
+              res.direccion ||
+              sugerencia.descripcion,
+
+            direccionBase:
+              res.direccion ||
+              sugerencia.descripcion,
+
+          });
+
+
+          setBusquedaDireccion(
+            ""
+          );
+
+
+          setSugerenciasDireccion(
+            []
+          );
+
+
+          mapRef.current
+            ?.animateToRegion(
+              {
+
+                latitude,
+
+                longitude,
+
+                latitudeDelta:
+                  0.006,
+
+                longitudeDelta:
+                  0.006,
+
+              },
+              350
+            );
+
+
+        } catch (error) {
+
+          Alert.alert(
+            "Dirección",
+            error.message ||
+            "No se pudo seleccionar la dirección."
+          );
+
+
+        } finally {
+
+          setSeleccionandoDireccion(
+            false
+          );
+
+        }
+
+      },
+      []
+    );
 
 
   /*
@@ -1545,23 +1785,203 @@ export default function HomeScreen() {
 
           <View
             style={
-              styles.mapInstruction
+              styles.addressSearchWrap
             }
           >
 
-            <Ionicons
-              name="finger-print-outline"
-              size={20}
-              color="#111827"
-            />
-
-            <Text
+            <View
               style={
-                styles.mapInstructionText
+                styles.addressSearchBox
               }
             >
-              Toca en el mapa donde quieres que te recojamos
-            </Text>
+
+              <Ionicons
+                name="search-outline"
+                size={20}
+                color="#64748b"
+              />
+
+
+              <TextInput
+
+                style={
+                  styles.addressSearchInput
+                }
+
+                value={
+                  busquedaDireccion
+                }
+
+                onChangeText={
+                  setBusquedaDireccion
+                }
+
+                placeholder="Escribe una dirección en Ceuta"
+
+                placeholderTextColor="#94a3b8"
+
+                autoCorrect={false}
+
+                returnKeyType="search"
+
+              />
+
+
+              {buscandoDireccion ? (
+
+                <ActivityIndicator
+                  size="small"
+                  color="#111827"
+                />
+
+              ) : busquedaDireccion ? (
+
+                <TouchableOpacity
+                  onPress={() => {
+
+                    setBusquedaDireccion(
+                      ""
+                    );
+
+                    setSugerenciasDireccion(
+                      []
+                    );
+
+                  }}
+                >
+
+                  <Ionicons
+                    name="close-circle"
+                    size={20}
+                    color="#94a3b8"
+                  />
+
+                </TouchableOpacity>
+
+              ) : null}
+
+            </View>
+
+
+            {sugerenciasDireccion.length >
+              0 && (
+
+                <View
+                  style={
+                    styles.suggestionsBox
+                  }
+                >
+
+                  {sugerenciasDireccion.map(
+                    (
+                      item,
+                      index
+                    ) => (
+
+                      <TouchableOpacity
+
+                        key={
+                          item.placeId
+                        }
+
+                        style={[
+                          styles.suggestionRow,
+
+                          index !==
+                          sugerenciasDireccion.length -
+                          1 &&
+                          styles.suggestionBorder,
+                        ]}
+
+                        onPress={() =>
+                          seleccionarDireccionSugerida(
+                            item
+                          )
+                        }
+
+                        disabled={
+                          seleccionandoDireccion
+                        }
+
+                      >
+
+                        <View
+                          style={
+                            styles.suggestionIcon
+                          }
+                        >
+
+                          <Ionicons
+                            name="location-outline"
+                            size={18}
+                            color="#111827"
+                          />
+
+                        </View>
+
+
+                        <View
+                          style={{
+                            flex: 1,
+                          }}
+                        >
+
+                          <Text
+                            style={
+                              styles.suggestionMain
+                            }
+                            numberOfLines={1}
+                          >
+                            {item.principal}
+                          </Text>
+
+
+                          {!!item.secundaria && (
+
+                            <Text
+                              style={
+                                styles.suggestionSecondary
+                              }
+                              numberOfLines={1}
+                            >
+                              {item.secundaria}
+                            </Text>
+
+                          )}
+
+                        </View>
+
+                      </TouchableOpacity>
+
+                    )
+                  )}
+
+                </View>
+
+              )}
+
+
+            <View
+              style={
+                styles.mapChangeHint
+              }
+            >
+
+              <Ionicons
+                name="hand-left-outline"
+                size={15}
+                color="#64748b"
+              />
+
+              <Text
+                style={
+                  styles.mapChangeHintText
+                }
+              >
+                O toca directamente el punto de recogida en el mapa
+              </Text>
+
+            </View>
 
           </View>
 
@@ -2700,5 +3120,162 @@ const styles = StyleSheet.create({
     borderColor: "#ffffff",
 
     zIndex: 10,
+  },
+  addressSearchWrap: {
+    position: "absolute",
+
+    top: 12,
+    left: 12,
+    right: 12,
+
+    zIndex: 30,
+
+    elevation: 30,
+  },
+
+  addressSearchBox: {
+    minHeight: 50,
+
+    paddingHorizontal: 13,
+
+    borderRadius: 15,
+
+    backgroundColor: "#ffffff",
+
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    gap: 9,
+
+    borderWidth: 1,
+
+    borderColor: "#e2e8f0",
+
+    shadowColor: "#000",
+
+    shadowOpacity: 0.1,
+
+    shadowRadius: 10,
+
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 7,
+  },
+
+  addressSearchInput: {
+    flex: 1,
+
+    minHeight: 48,
+
+    fontSize: 15,
+
+    color: "#111827",
+  },
+
+  suggestionsBox: {
+    marginTop: 6,
+
+    borderRadius: 15,
+
+    overflow: "hidden",
+
+    backgroundColor: "#ffffff",
+
+    borderWidth: 1,
+
+    borderColor: "#e2e8f0",
+
+    shadowColor: "#000",
+
+    shadowOpacity: 0.1,
+
+    shadowRadius: 10,
+
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 8,
+  },
+
+  suggestionRow: {
+    minHeight: 58,
+
+    paddingHorizontal: 12,
+
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    gap: 9,
+  },
+
+  suggestionBorder: {
+    borderBottomWidth: 1,
+
+    borderBottomColor: "#f1f5f9",
+  },
+
+  suggestionIcon: {
+    width: 34,
+    height: 34,
+
+    borderRadius: 17,
+
+    backgroundColor: "#f1f5f9",
+
+    alignItems: "center",
+
+    justifyContent: "center",
+  },
+
+  suggestionMain: {
+    fontSize: 14,
+
+    fontWeight: "700",
+
+    color: "#111827",
+  },
+
+  suggestionSecondary: {
+    marginTop: 2,
+
+    fontSize: 12,
+
+    color: "#64748b",
+  },
+
+  mapChangeHint: {
+    marginTop: 6,
+
+    alignSelf: "center",
+
+    paddingHorizontal: 10,
+
+    paddingVertical: 6,
+
+    borderRadius: 999,
+
+    backgroundColor:
+      "rgba(255,255,255,0.95)",
+
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    gap: 5,
+  },
+
+  mapChangeHintText: {
+    fontSize: 11,
+
+    color: "#64748b",
+
+    fontWeight: "600",
   },
 });

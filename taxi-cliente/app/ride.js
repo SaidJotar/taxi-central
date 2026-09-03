@@ -649,9 +649,14 @@ export default function RideScreen() {
                             </View>
 
                             <View style={{ flex: 1 }}>
+
                                 <Text style={styles.driverName}>
-                                    {solicitud?.taxista?.nombreCompleto || "Taxista asignado"}
+                                    {solicitud?.taxista?.nombreCompleto ||
+                                        "Taxista asignado"}
                                 </Text>
+
+
+                                {/* VALORACIÓN DEL TAXISTA */}
 
                                 {solicitud?.taxista?.numeroValoraciones > 0 ? (
 
@@ -670,8 +675,8 @@ export default function RideScreen() {
                                         </Text>
 
                                         <Text style={styles.driverRatingCount}>
-                                            · {solicitud.taxista.numeroValoraciones}
-                                            {" "}
+                                            ·{" "}
+                                            {solicitud.taxista.numeroValoraciones}{" "}
                                             {solicitud.taxista.numeroValoraciones === 1
                                                 ? "valoración"
                                                 : "valoraciones"}
@@ -681,11 +686,22 @@ export default function RideScreen() {
 
                                 ) : (
 
-                                    <Text style={styles.driverNoRating}>
-                                        Sin valoraciones todavía
-                                    </Text>
+                                    <View style={styles.driverRatingRow}>
+
+                                        <Ionicons
+                                            name="star-outline"
+                                            size={14}
+                                            color="#94a3b8"
+                                        />
+
+                                        <Text style={styles.driverNoRating}>
+                                            Sin valoraciones todavía
+                                        </Text>
+
+                                    </View>
 
                                 )}
+
 
                                 <Text style={styles.driverMeta}>
                                     {solicitud?.taxista?.numeroTaxi
@@ -693,19 +709,30 @@ export default function RideScreen() {
                                         : "Taxi asignado"}
                                 </Text>
 
-                                {(solicitud?.taxista?.marca || solicitud?.taxista?.modelo) && (
-                                    <Text style={styles.driverMeta}>
-                                        {[solicitud?.taxista?.marca, solicitud?.taxista?.modelo]
-                                            .filter(Boolean)
-                                            .join(" ")}
-                                    </Text>
-                                )}
+
+                                {(solicitud?.taxista?.marca ||
+                                    solicitud?.taxista?.modelo) && (
+
+                                        <Text style={styles.driverMeta}>
+                                            {[
+                                                solicitud?.taxista?.marca,
+                                                solicitud?.taxista?.modelo,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(" ")}
+                                        </Text>
+
+                                    )}
+
 
                                 {!!solicitud?.taxista?.matricula && (
+
                                     <Text style={styles.driverMeta}>
                                         {solicitud.taxista.matricula}
                                     </Text>
+
                                 )}
+
                             </View>
                         </View>
 
@@ -1220,5 +1247,36 @@ const styles = StyleSheet.create({
         fontSize: 12,
 
         color: "#94a3b8",
+    },
+    driverRatingRow: {
+        marginTop: 3,
+
+        flexDirection: "row",
+
+        alignItems: "center",
+
+        gap: 3,
+    },
+
+    driverRatingValue: {
+        fontSize: 13,
+
+        fontWeight: "800",
+
+        color: "#111827",
+    },
+
+    driverRatingCount: {
+        fontSize: 12,
+
+        color: "#64748b",
+    },
+
+    driverNoRating: {
+        fontSize: 12,
+
+        color: "#94a3b8",
+
+        fontWeight: "600",
     },
 });

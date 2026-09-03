@@ -1076,6 +1076,292 @@ router.get(
     }
 );
 
+router.get(
+    "/direcciones/autocomplete",
+    async (req, res) => {
+
+        try {
+
+            const texto =
+                String(
+                    req.query.texto || ""
+                ).trim();
+
+
+            if (
+                texto.length < 2
+            ) {
+
+                return res.json({
+                    ok: true,
+                    resultados: [],
+                });
+
+            }
+
+
+            const apiKey =
+                process.env.GOOGLE_MAPS_API_KEY;
+
+
+            if (!apiKey) {
+
+                return res.status(500).json({
+                    ok: false,
+                    error:
+                        "Google Maps no está configurado.",
+                });
+
+            }
+
+
+            /*
+             * Limitamos la búsqueda a Ceuta.
+             */
+            const params =
+                new URLSearchParams({
+
+                    input:
+                        texto,
+
+                    key:
+                        apiKey,
+
+                    language:
+                        "es",
+
+                    components:
+                        "country:es",
+
+                    locationbias:
+                        "circle:15000@35.8894,-5.3213",
+
+                });
+
+
+            const response =
+                await fetch(
+                    `https://maps.googleapis.com/maps/api/place/autocomplete/json?${params.toString()}`
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (
+                data.status !== "OK" &&
+                data.status !==
+                "ZERO_RESULTS"
+            ) {
+
+                console.error(
+                    "Google Autocomplete:",
+                    data
+                );
+
+
+                return res.status(502).json({
+                    ok: false,
+                    error:
+                        "No se pudieron buscar direcciones.",
+                });
+
+            }
+
+
+            const resultados =
+                (data.predictions || [])
+                    .slice(0, 6)
+                    .map(
+                        (item) => ({
+
+                            placeId:
+                                item.place_id,
+
+                            descripcion:
+                                item.description,
+
+                            principal:
+                                item.structured_formatting
+                                    ?.main_text ||
+                                item.description,
+
+                            secundaria:
+                                item.structured_formatting
+                                    ?.secondary_text ||
+                                "",
+
+                        })
+                    );
+
+
+            return res.json({
+                ok: true,
+                resultados,
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "Error autocomplete dirección:",
+                error
+            );
+
+
+            return res.status(500).json({
+                ok: false,
+                error:
+                    "No se pudieron buscar direcciones.",
+            });
+
+        }
+
+    }
+);
+
+router.get(
+    "/direcciones/place/:placeId",
+    async (req, res) => {
+
+        try {
+
+            const {
+                placeId,
+            } = req.params;
+
+
+            if (!placeId) {
+
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "Falta la ubicación.",
+                });
+
+            }
+
+
+            const apiKey =
+                process.env.GOOGLE_MAPS_API_KEY;
+
+
+            const params =
+                new URLSearchParams({
+
+                    place_id:
+                        placeId,
+
+                    key:
+                        apiKey,
+
+                    language:
+                        "es",
+
+                    fields:
+                        "formatted_address,geometry,name",
+
+                });
+
+
+            const response =
+                await fetch(
+                    `https://maps.googleapis.com/maps/api/place/details/json?${params.toString()}`
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (
+                data.status !== "OK" ||
+                !data.result?.geometry?.location
+            ) {
+
+                return res.status(404).json({
+                    ok: false,
+                    error:
+                        "No se pudo localizar esa dirección.",
+                });
+
+            }
+
+
+            const lat =
+                Number(
+                    data.result.geometry.location.lat
+                );
+
+            const lng =
+                Number(
+                    data.result.geometry.location.lng
+                );
+
+
+            /*
+             * Evitamos permitir direcciones
+             * claramente fuera de Ceuta.
+             */
+            const distanciaCeuta =
+                distanciaMetros(
+                    35.8894,
+                    -5.3213,
+                    lat,
+                    lng
+                );
+
+
+            if (
+                distanciaCeuta >
+                20000
+            ) {
+
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "La dirección debe estar en Ceuta.",
+                });
+
+            }
+
+
+            return res.json({
+
+                ok: true,
+
+                direccion:
+                    data.result
+                        .formatted_address ||
+                    data.result.name ||
+                    "",
+
+                lat,
+                lng,
+
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "Error detalle dirección:",
+                error
+            );
+
+
+            return res.status(500).json({
+                ok: false,
+                error:
+                    "No se pudo obtener la dirección.",
+            });
+
+        }
+
+    }
+);
+
 
 /*
 |--------------------------------------------------------------------------

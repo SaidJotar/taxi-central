@@ -152,4 +152,24 @@ export const api = {
                 method: "POST",
             }
         ),
+
+    buscarDirecciones: (texto) =>
+        request(
+            `/cliente/direcciones/autocomplete?texto=${encodeURIComponent(
+                texto
+            )}`,
+            {
+                method: "GET",
+            }
+        ),
+
+    detalleDireccion: (placeId) =>
+        request(
+            `/cliente/direcciones/place/${encodeURIComponent(
+                placeId
+            )}`,
+            {
+                method: "GET",
+            }
+        ),
 };
