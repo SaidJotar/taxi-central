@@ -59,6 +59,20 @@ export default function InicioScreen() {
   const esperandoAudioRef =
     useRef(false);
 
+  const [
+    proximaReserva,
+    setProximaReserva,
+  ] = useState(null);
+
+  const [
+    pestañaReservasInicial,
+    setPestañaReservasInicial,
+  ] = useState("disponibles");
+
+  const [
+    totalReservasMias,
+    setTotalReservasMias,
+  ] = useState(0);
 
   const servicioActivoRef = useRef(servicioActivo);
 
@@ -87,15 +101,15 @@ export default function InicioScreen() {
   const mensajesInicializadosRef = useRef(false);
   const ultimoMensajeClienteRef = useRef(null);
 
-const [
-  mostrarReservas,
-  setMostrarReservas,
-] = useState(false);
+  const [
+    mostrarReservas,
+    setMostrarReservas,
+  ] = useState(false);
 
-const [
-  reservasPendientes,
-  setReservasPendientes,
-] = useState(0);
+  const [
+    reservasPendientes,
+    setReservasPendientes,
+  ] = useState(0);
 
   const gpsDebeEstarActivo = estado !== "desconectado";
 
@@ -143,66 +157,150 @@ const [
     });
   }, [socket]);
 
-  const cargarReservasPendientes =
-  useCallback(async () => {
+  const cargarMisReservas =
+    useCallback(async () => {
 
-    if (!token) {
-      return;
-    }
+      if (!token) {
+        return;
+      }
 
-    try {
+      try {
 
-      const response =
-        await fetch(
-          `${API_BASE_URL}/mobile/reservas/disponibles`,
-          {
-            headers: {
-              Accept:
-                "application/json",
+        const response =
+          await fetch(
+            `${API_BASE_URL}/mobile/reservas/mias`,
+            {
+              headers: {
+                Accept:
+                  "application/json",
 
-              Authorization:
-                `Bearer ${token}`,
-            },
-          }
+                Authorization:
+                  `Bearer ${token}`,
+              },
+            }
+          );
+
+
+        const data =
+          await response.json();
+
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Error cargando mis reservas"
+          );
+        }
+
+
+        const lista =
+          Array.isArray(
+            data?.reservas
+          )
+            ? data.reservas
+            : [];
+
+
+        const ordenadas =
+          [...lista].sort(
+            (
+              a,
+              b
+            ) =>
+              new Date(
+                a.fechaHora
+              ).getTime() -
+              new Date(
+                b.fechaHora
+              ).getTime()
+          );
+
+
+        setTotalReservasMias(
+          ordenadas.length
         );
 
 
-      const data =
-        await response.json();
+        setProximaReserva(
+          ordenadas[0] ||
+          null
+        );
 
 
-      if (!response.ok) {
+      } catch (error) {
 
-        throw new Error(
-          data?.error ||
-          "Error cargando reservas"
+        console.log(
+          "Error cargando mis reservas:",
+          error.message
         );
 
       }
 
+    }, [
+      token,
+      API_BASE_URL,
+    ]);
 
-      setReservasPendientes(
-        Array.isArray(
-          data?.reservas
-        )
-          ? data.reservas.length
-          : 0
-      );
+  const cargarReservasPendientes =
+    useCallback(async () => {
+
+      if (!token) {
+        return;
+      }
+
+      try {
+
+        const response =
+          await fetch(
+            `${API_BASE_URL}/mobile/reservas/disponibles`,
+            {
+              headers: {
+                Accept:
+                  "application/json",
+
+                Authorization:
+                  `Bearer ${token}`,
+              },
+            }
+          );
 
 
-    } catch (error) {
+        const data =
+          await response.json();
 
-      console.log(
-        "Error reservas pendientes:",
-        error.message
-      );
 
-    }
+        if (!response.ok) {
 
-  }, [
-    token,
-    API_BASE_URL,
-  ]);
+          throw new Error(
+            data?.error ||
+            "Error cargando reservas"
+          );
+
+        }
+
+
+        setReservasPendientes(
+          Array.isArray(
+            data?.reservas
+          )
+            ? data.reservas.length
+            : 0
+        );
+
+
+      } catch (error) {
+
+        console.log(
+          "Error reservas pendientes:",
+          error.message
+        );
+
+      }
+
+    }, [
+      token,
+      API_BASE_URL,
+    ]);
 
   const recuperarServicioActivo = useCallback(() => {
     if (!socket?.connected) return;
@@ -244,24 +342,45 @@ const [
 
   useEffect(() => {
 
-  cargarReservasPendientes();
+    cargarMisReservas();
 
 
-  const interval =
-    setInterval(
-      cargarReservasPendientes,
-      15000
-    );
+    const interval =
+      setInterval(
+        cargarMisReservas,
+        15000
+      );
 
 
-  return () =>
-    clearInterval(
-      interval
-    );
+    return () =>
+      clearInterval(
+        interval
+      );
 
-}, [
-  cargarReservasPendientes,
-]);
+  }, [
+    cargarMisReservas,
+  ]);
+
+  useEffect(() => {
+
+    cargarReservasPendientes();
+
+
+    const interval =
+      setInterval(
+        cargarReservasPendientes,
+        15000
+      );
+
+
+    return () =>
+      clearInterval(
+        interval
+      );
+
+  }, [
+    cargarReservasPendientes,
+  ]);
 
   useEffect(() => {
     cargarTaxisDisponibles();
@@ -519,46 +638,44 @@ const [
       setCambiandoEstado(false);
     });
 
+    const onReservaNueva = () => {
+      cargarReservasPendientes();
+      cargarMisReservas();
+    };
+
+    const onReservaAceptada = () => {
+      cargarReservasPendientes();
+      cargarMisReservas();
+    };
+
+    const onReservaCancelada = (data) => {
+      cargarReservasPendientes();
+      cargarMisReservas();
+
+      Alert.alert(
+        "Reserva cancelada",
+        data?.direccionRecogida
+          ? `El cliente ha cancelado la reserva de ${data.direccionRecogida}.`
+          : "El cliente ha cancelado una reserva que tenías aceptada."
+      );
+    };
+
+
     socket.on(
-  "reserva:nueva",
-  () => {
-
-    console.log(
-      "📅 Nueva reserva disponible"
+      "reserva:nueva",
+      onReservaNueva
     );
 
-    cargarReservasPendientes();
-
-  }
-);
-
-
-socket.on(
-  "reserva:aceptada",
-  () => {
-
-    console.log(
-      "📅 Reserva aceptada"
+    socket.on(
+      "reserva:aceptada",
+      onReservaAceptada
     );
 
-    cargarReservasPendientes();
-
-  }
-);
-
-
-socket.on(
-  "reserva:cancelada",
-  () => {
-
-    console.log(
-      "📅 Reserva cancelada"
+    socket.on(
+      "reserva:cancelada",
+      onReservaCancelada
     );
 
-    cargarReservasPendientes();
-
-  }
-);
 
     socket.on("taxista:conectado", async (data) => {
       if (data?.taxista) {
@@ -786,39 +903,6 @@ socket.on(
       setEstado("desconectado");
     });
 
-    const onReservaCancelada = (
-  data
-) => {
-
-  console.log(
-    "🚫 Reserva cancelada:",
-    data
-  );
-
-
-  /*
-   * Actualizamos el punto rojo.
-   */
-  cargarReservasPendientes();
-
-
-  /*
-   * Avisamos inmediatamente.
-   */
-  Alert.alert(
-    "Reserva cancelada",
-    data?.direccionRecogida
-      ? `El cliente ha cancelado la reserva de ${data.direccionRecogida}.`
-      : "El cliente ha cancelado una reserva que tenías aceptada."
-  );
-
-};
-
-
-socket.on(
-  "reserva:cancelada",
-  onReservaCancelada
-);
 
     return () => {
       socket.off("connect");
@@ -837,20 +921,16 @@ socket.on(
       socket.off("error:general");
       socket.off("taxista:gps_requerido");
       socket.off(
-  "reserva:nueva"
-);
+        "reserva:nueva"
+      );
 
-socket.off(
-  "reserva:aceptada"
-);
-
-socket.off(
-  "reserva:cancelada"
-);
-socket.off(
-  "reserva:cancelada",
-  onReservaCancelada
-);
+      socket.off(
+        "reserva:aceptada"
+      );
+      socket.off(
+        "reserva:cancelada",
+        onReservaCancelada
+      );
     };
   }, [socket, token, updateTaxista, taxista?.id, setServicioActivo]);
 
@@ -1184,24 +1264,26 @@ socket.off(
   }
 
   if (
-  mostrarReservas
-) {
+    mostrarReservas
+  ) {
 
-  return (
+    return (
 
-    <ReservasTaxistaScreen
-      onClose={() => {
-        setMostrarReservas(
-          false
-        );
+      <ReservasTaxistaScreen
+        pestañaInicial={
+          pestañaReservasInicial
+        }
+        onClose={() => {
+          setMostrarReservas(false);
 
-        cargarReservasPendientes();
-      }}
-    />
+          cargarReservasPendientes();
+          cargarMisReservas();
+        }}
+      />
 
-  );
+    );
 
-}
+  }
 
   const llamadaTerminada =
     estadoLlamadaPlayer.isLoaded &&
@@ -1210,955 +1292,2370 @@ socket.off(
     estadoLlamadaPlayer.duration - 0.5;
 
 
-
   return (
-    <SafeAreaView style={styles.appShell} edges={["bottom"]}>
+
+    <SafeAreaView
+      style={styles.appShell}
+      edges={["bottom"]}
+    >
+
       <ScrollView
+
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: Math.max(espacioInferior, 28) },
+
+          {
+            paddingBottom:
+              Math.max(
+                espacioInferior,
+                18
+              ),
+          },
         ]}
-        showsVerticalScrollIndicator={false}
+
+        showsVerticalScrollIndicator={
+          false
+        }
+
+        bounces={
+          !servicioActivo
+        }
 
       >
-        <View style={styles.appCard}>
-          <View style={styles.topRow}>
-            <View style={styles.headerMain}>
-              <Text style={styles.eyebrow}>Panel del taxista</Text>
-              <Text style={styles.appTitle}>
-                {numeroTaxi ? `Taxi ${numeroTaxi}` : "App Taxista"}
+
+        <View
+          style={[
+            styles.appCard,
+
+            servicioActivo &&
+            styles.appCardServicioActivo,
+          ]}
+        >
+
+          {/* =================================================
+            CABECERA COMPACTA
+        ================================================= */}
+
+          <View
+            style={
+              styles.topRow
+            }
+          >
+
+            <View
+              style={
+                styles.headerMain
+              }
+            >
+
+              <Text
+                style={
+                  styles.eyebrow
+                }
+              >
+                Panel del taxista
               </Text>
+
+
+              <Text
+                style={
+                  styles.appTitle
+                }
+              >
+
+                {numeroTaxi
+                  ? `Taxi ${numeroTaxi}`
+                  : "App Taxista"}
+
+              </Text>
+
             </View>
 
-            <View style={styles.onlineBadge}>
-              <Text style={styles.onlineLabel}>Taxis Disponibles</Text>
-              <Text style={styles.onlineValue}>
-                {taxisDisponibles !== null ? taxisDisponibles : "..."}
+
+            <View
+              style={
+                styles.onlineBadge
+              }
+            >
+
+              <Text
+                style={
+                  styles.onlineLabel
+                }
+              >
+                Disponibles
               </Text>
+
+
+              <Text
+                style={
+                  styles.onlineValue
+                }
+              >
+
+                {taxisDisponibles !== null
+                  ? taxisDisponibles
+                  : "..."}
+
+              </Text>
+
             </View>
+
           </View>
 
-          <View style={styles.infoOperativa}>
+
+          {/* =================================================
+            ESTADO OPERATIVO
+        ================================================= */}
+
+          <View
+            style={
+              styles.infoOperativa
+            }
+          >
+
             {servicioActivo ? (
-              <View style={[styles.infoPill, styles.infoServicio]}>
-                <Text style={styles.infoPillText}>🚕 En servicio</Text>
+
+              <View
+                style={[
+                  styles.infoPill,
+                  styles.infoServicio,
+                ]}
+              >
+
+                <Ionicons
+                  name="car-sport-outline"
+                  size={14}
+                  color="#92400e"
+                />
+
+                <Text
+                  style={
+                    styles.infoPillText
+                  }
+                >
+                  En servicio
+                </Text>
+
               </View>
+
             ) : paradaActual ? (
-              <>
-                <View style={[styles.infoPill, styles.infoParada]}>
-                  <Text style={styles.infoPillText}>
-                    🚖 En parada: {paradaActual.nombre}
+
+              <View
+                style={
+                  styles.estadoParadaRow
+                }
+              >
+
+                <View
+                  style={[
+                    styles.infoPill,
+                    styles.infoParada,
+                  ]}
+                >
+
+                  <Ionicons
+                    name="car-outline"
+                    size={14}
+                    color="#1d4ed8"
+                  />
+
+                  <Text
+                    style={
+                      styles.infoPillText
+                    }
+                    numberOfLines={1}
+                  >
+                    {paradaActual.nombre}
                   </Text>
+
                 </View>
 
-                <Text style={styles.infoExtra}>
+
+                <Text
+                  style={
+                    styles.infoExtraInline
+                  }
+                  numberOfLines={1}
+                >
+
                   {posicionEnParada
-                    ? `Posición en cola: ${posicionEnParada}`
-                    : "Calculando posición en cola..."}
+                    ? `Cola: ${posicionEnParada}`
+                    : "Calculando cola..."}
+
                 </Text>
-              </>
-            ) : estado === "disponible" ? (
-              <View style={[styles.infoPill, styles.infoDisponible]}>
-                <Text style={styles.infoPillText}>✅ Disponible</Text>
+
               </View>
-            ) : (
-              <View style={[styles.infoPill, styles.infoDesconectado]}>
-                <Text style={styles.infoPillText}>⚪ Desconectado</Text>
-              </View>
-            )}
-          </View>
 
-          {!!accionPendiente && (
-            <Text style={styles.infoExtra}>{accionPendiente}</Text>
-          )}
+            ) : estado ===
+              "disponible" ? (
 
-          {!servicioActivo && paradaEntrando?.parada && (
-            <View style={styles.noticeCard}>
-              <Text style={styles.noticeTitle}>Entrando en parada</Text>
-
-              <Text style={styles.noticeText}>
-                {paradaEntrando.parada.nombre}
-              </Text>
-
-              <Text style={styles.noticeSubtext}>
-                Te posicionarás automáticamente en {segundosEntradaParada}s
-              </Text>
-            </View>
-          )}
-
-          {paradaSaliendo && (
-            <View style={styles.noticeCard}>
-              <Text style={styles.noticeTitle}>Movimiento detectado</Text>
-              <Text style={styles.noticeText}>Saliendo de la parada</Text>
-            </View>
-          )}
-
-          {!!gpsError && !gpsInicializando && (
-            <Text style={styles.errorText}>{gpsError}</Text>
-          )}
-
-          {!servicioActivo && (
-            <View style={styles.actionsRow}>
-              <TouchableOpacity
+              <View
                 style={[
-                  styles.stateButton,
-                  estado === "disponible" && styles.stateButtonActive,
-                  cambiandoEstado && styles.stateButtonDisabled,
+                  styles.infoPill,
+                  styles.infoDisponible,
                 ]}
-                onPress={() => cambiarEstado("disponible")}
-                activeOpacity={0.85}
-                disabled={cambiandoEstado}
               >
+
                 <Ionicons
                   name="checkmark-circle-outline"
-                  size={24}
-                  color={estado === "disponible" ? "#2563eb" : "#0f172a"}
+                  size={14}
+                  color="#166534"
                 />
+
                 <Text
-                  style={[
-                    styles.stateButtonTitle,
-                    estado === "disponible" && styles.stateButtonTitleActive,
-                  ]}
+                  style={
+                    styles.infoPillText
+                  }
                 >
                   Disponible
                 </Text>
-                <Text style={styles.stateButtonText}>Recibir servicios</Text>
-              </TouchableOpacity>
 
-              <TouchableOpacity
+              </View>
+
+            ) : (
+
+              <View
                 style={[
-                  styles.stateButton,
-                  estado === "desconectado" && styles.stateButtonActive,
-                  cambiandoEstado && styles.stateButtonDisabled,
+                  styles.infoPill,
+                  styles.infoDesconectado,
                 ]}
-                onPress={() => cambiarEstado("desconectado")}
-                activeOpacity={0.85}
-                disabled={cambiandoEstado}
               >
+
                 <Ionicons
                   name="power-outline"
-                  size={24}
-                  color={estado === "desconectado" ? "#2563eb" : "#0f172a"}
+                  size={14}
+                  color="#475569"
                 />
+
                 <Text
-                  style={[
-                    styles.stateButtonTitle,
-                    estado === "desconectado" && styles.stateButtonTitleActive,
-                  ]}
+                  style={
+                    styles.infoPillText
+                  }
                 >
                   Desconectado
                 </Text>
-                <Text style={styles.stateButtonText}>No recibir servicios</Text>
-              </TouchableOpacity>
-            </View>
+
+              </View>
+
+            )}
+
+          </View>
+
+
+          {!!accionPendiente && (
+
+            <Text
+              style={
+                styles.infoExtra
+              }
+            >
+              {accionPendiente}
+            </Text>
+
           )}
 
-          {servicioActivo && (
-            <View style={styles.tarjetaServicio}>
-              <View style={styles.tarjetaServicioHeader}>
-                <Text style={styles.tarjetaServicioTitle}>Servicio activo</Text>
-                <View style={styles.tarjetaServicioBadge}>
-                  <Text style={styles.tarjetaServicioBadgeText}>En curso</Text>
+
+          {/* =================================================
+            ENTRANDO EN PARADA
+        ================================================= */}
+
+          {!servicioActivo &&
+            paradaEntrando?.parada && (
+
+              <View
+                style={
+                  styles.noticeCard
+                }
+              >
+
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
+
+                  <Text
+                    style={
+                      styles.noticeTitle
+                    }
+                  >
+                    Entrando en parada
+                  </Text>
+
+
+                  <Text
+                    style={
+                      styles.noticeText
+                    }
+                    numberOfLines={1}
+                  >
+                    {paradaEntrando.parada.nombre}
+                  </Text>
+
                 </View>
-              </View>
 
-              <View style={styles.servicioItem}>
-                <Text style={styles.servicioLabel}>Teléfono</Text>
-                <Text style={styles.servicioValue}>
-                  {servicioActivo.telefonoCliente || "-"}
+
+                <Text
+                  style={
+                    styles.noticeCountdown
+                  }
+                >
+                  {segundosEntradaParada}s
                 </Text>
+
               </View>
 
-              <View style={styles.servicioItem}>
-                <Text style={styles.servicioLabel}>Recogida</Text>
-                <Text style={styles.servicioValue}>
+            )}
+
+
+          {!servicioActivo &&
+            paradaSaliendo && (
+
+              <View
+                style={
+                  styles.noticeCard
+                }
+              >
+
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
+
+                  <Text
+                    style={
+                      styles.noticeTitle
+                    }
+                  >
+                    Movimiento detectado
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.noticeText
+                    }
+                  >
+                    Saliendo de la parada
+                  </Text>
+
+                </View>
+
+              </View>
+
+            )}
+
+
+          {!!gpsError &&
+            !gpsInicializando && (
+
+              <Text
+                style={
+                  styles.errorText
+                }
+              >
+                {gpsError}
+              </Text>
+
+            )}
+
+
+          {/* =================================================
+            DISPONIBLE / DESCONECTADO
+        ================================================= */}
+
+          {!servicioActivo && (
+
+            <View
+              style={
+                styles.actionsRow
+              }
+            >
+
+              <TouchableOpacity
+
+                style={[
+                  styles.stateButton,
+
+                  estado ===
+                  "disponible" &&
+                  styles.stateButtonActive,
+
+                  cambiandoEstado &&
+                  styles.stateButtonDisabled,
+                ]}
+
+                onPress={() =>
+                  cambiarEstado(
+                    "disponible"
+                  )
+                }
+
+                activeOpacity={0.85}
+
+                disabled={
+                  cambiandoEstado
+                }
+
+              >
+
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color={
+                    estado ===
+                      "disponible"
+                      ? "#2563eb"
+                      : "#0f172a"
+                  }
+                />
+
+
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
+
+                  <Text
+
+                    style={[
+                      styles.stateButtonTitle,
+
+                      estado ===
+                      "disponible" &&
+                      styles.stateButtonTitleActive,
+                    ]}
+
+                  >
+                    Disponible
+                  </Text>
+
+
+                  <Text
+                    style={
+                      styles.stateButtonText
+                    }
+                  >
+                    Recibir servicios
+                  </Text>
+
+                </View>
+
+              </TouchableOpacity>
+
+
+              <TouchableOpacity
+
+                style={[
+                  styles.stateButton,
+
+                  estado ===
+                  "desconectado" &&
+                  styles.stateButtonActive,
+
+                  cambiandoEstado &&
+                  styles.stateButtonDisabled,
+                ]}
+
+                onPress={() =>
+                  cambiarEstado(
+                    "desconectado"
+                  )
+                }
+
+                activeOpacity={0.85}
+
+                disabled={
+                  cambiandoEstado
+                }
+
+              >
+
+                <Ionicons
+                  name="power-outline"
+                  size={20}
+                  color={
+                    estado ===
+                      "desconectado"
+                      ? "#2563eb"
+                      : "#0f172a"
+                  }
+                />
+
+
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
+
+                  <Text
+
+                    style={[
+                      styles.stateButtonTitle,
+
+                      estado ===
+                      "desconectado" &&
+                      styles.stateButtonTitleActive,
+                    ]}
+
+                  >
+                    Desconectado
+                  </Text>
+
+
+                  <Text
+                    style={
+                      styles.stateButtonText
+                    }
+                  >
+                    No recibir
+                  </Text>
+
+                </View>
+
+              </TouchableOpacity>
+
+            </View>
+
+          )}
+
+
+          {/* =================================================
+            SERVICIO ACTIVO
+        ================================================= */}
+
+          {servicioActivo && (
+
+            <View
+              style={
+                styles.tarjetaServicio
+              }
+            >
+
+              <View
+                style={
+                  styles.tarjetaServicioHeader
+                }
+              >
+
+                <Text
+                  style={
+                    styles.tarjetaServicioTitle
+                  }
+                >
+                  Servicio activo
+                </Text>
+
+
+                <View
+                  style={
+                    styles.tarjetaServicioBadge
+                  }
+                >
+
+                  <Text
+                    style={
+                      styles.tarjetaServicioBadgeText
+                    }
+                  >
+                    En curso
+                  </Text>
+
+                </View>
+
+              </View>
+
+
+              {/* TELÉFONO */}
+
+              <View
+                style={
+                  styles.servicioItemRow
+                }
+              >
+
+                <Ionicons
+                  name="call-outline"
+                  size={17}
+                  color="#64748b"
+                />
+
+
+                <Text
+                  style={
+                    styles.servicioLabelInline
+                  }
+                >
+                  Teléfono
+                </Text>
+
+
+                <Text
+                  style={
+                    styles.servicioValueInline
+                  }
+                  numberOfLines={1}
+                >
+                  {servicioActivo.telefonoCliente ||
+                    "-"}
+                </Text>
+
+              </View>
+
+
+              {/* RECOGIDA */}
+
+              <View
+                style={
+                  styles.servicioItemRow
+                }
+              >
+
+                <Ionicons
+                  name="location-outline"
+                  size={17}
+                  color="#64748b"
+                />
+
+
+                <Text
+                  style={
+                    styles.servicioLabelInline
+                  }
+                >
+                  Recogida
+                </Text>
+
+
+                <Text
+                  style={
+                    styles.servicioValueInline
+                  }
+                  numberOfLines={2}
+                >
+
                   {servicioActivo.direccionBase ||
                     servicioActivo.direccionRecogida ||
                     "-"}
+
                 </Text>
+
               </View>
 
+
+              {/* REFERENCIA */}
+
               {!!servicioActivo.referenciaRecogida && (
-                <View style={styles.servicioItem}>
-                  <Text style={styles.servicioLabel}>Referencia</Text>
-                  <Text style={styles.servicioValue}>
+
+                <View
+                  style={
+                    styles.servicioItemRow
+                  }
+                >
+
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={16}
+                    color="#64748b"
+                  />
+
+
+                  <Text
+                    style={
+                      styles.servicioLabelInline
+                    }
+                  >
+                    Referencia
+                  </Text>
+
+
+                  <Text
+                    style={
+                      styles.servicioValueInline
+                    }
+                    numberOfLines={2}
+                  >
                     {servicioActivo.referenciaRecogida}
                   </Text>
+
                 </View>
+
               )}
 
+
+              {/* =================================================
+                LLAMADA
+                SOLO SERVICIO POR TELÉFONO
+            ================================================= */}
+
               {servicioActivo?.callId && (
+
                 <TouchableOpacity
-                  style={styles.llamadaButton}
-                  onPress={escucharLlamadaCliente}
+
+                  style={
+                    styles.llamadaButton
+                  }
+
+                  onPress={
+                    escucharLlamadaCliente
+                  }
+
                   activeOpacity={0.85}
+
                 >
+
                   <Ionicons
+
                     name={
                       estadoLlamadaPlayer.playing
                         ? "pause-circle-outline"
+
                         : llamadaTerminada
                           ? "refresh-circle-outline"
+
                           : "play-circle-outline"
                     }
-                    size={26}
+
+                    size={22}
+
                     color="#2563eb"
+
                   />
 
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.llamadaButtonTitle}>
-                      {estadoLlamadaPlayer.playing
-                        ? "Pausar llamada"
-                        : llamadaTerminada
-                          ? "Volver a escuchar"
-                          : estadoLlamadaPlayer.isLoaded
-                            ? "Continuar llamada"
-                            : "Escuchar llamada"}
-                    </Text>
 
-                    <Text style={styles.llamadaButtonSubtitle}>
-                      Conversación con el cliente
-                    </Text>
-                  </View>
+                  <Text
+                    style={
+                      styles.llamadaButtonTitle
+                    }
+                  >
+
+                    {estadoLlamadaPlayer.playing
+                      ? "Pausar llamada"
+
+                      : llamadaTerminada
+                        ? "Volver a escuchar"
+
+                        : estadoLlamadaPlayer.isLoaded
+                          ? "Continuar llamada"
+
+                          : "Escuchar llamada"}
+
+                  </Text>
+
                 </TouchableOpacity>
+
               )}
 
-              <TouchableOpacity
-                style={styles.clienteNoLocalizadoButton}
-                onPress={clienteNoLocalizado}
-              >
-                <Ionicons
-                  name="person-remove-outline"
-                  size={20}
-                  color="#b91c1c"
-                />
 
-                <Text style={styles.clienteNoLocalizadoText}>
-                  Cliente no localizado
-                </Text>
-              </TouchableOpacity>
+              {/* =================================================
+                MENSAJES
+                SOLO SERVICIO DESDE APP
+            ================================================= */}
 
-              <TouchableOpacity
-                style={styles.finishButton}
-                onPress={abrirCerrarServicio}
-              >
-                <Text style={styles.finishButtonText}>Finalizar servicio</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {servicioActivo && !servicioActivo?.callId && (
-            <TouchableOpacity
-              style={styles.chatButton}
-              onPress={() => {
-                setMensajesNoLeidos(0);
-                setMostrarChatServicio(true);
-              }}
-            >
-              <View style={styles.chatIconWrap}>
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={18}
-                  color="#111827"
-                />
+              {!servicioActivo?.callId && (
 
-                {mensajesNoLeidos > 0 && (
-                  <View style={styles.chatBadge}>
-                    <Text style={styles.chatBadgeText}>
-                      {mensajesNoLeidos > 9
-                        ? "9+"
-                        : mensajesNoLeidos}
-                    </Text>
+                <TouchableOpacity
+
+                  style={
+                    styles.chatButton
+                  }
+
+                  onPress={() => {
+
+                    setMensajesNoLeidos(
+                      0
+                    );
+
+                    setMostrarChatServicio(
+                      true
+                    );
+
+                  }}
+
+                  activeOpacity={0.85}
+
+                >
+
+                  <View
+                    style={
+                      styles.chatIconWrap
+                    }
+                  >
+
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={18}
+                      color="#111827"
+                    />
+
+
+                    {mensajesNoLeidos >
+                      0 && (
+
+                        <View
+                          style={
+                            styles.chatBadge
+                          }
+                        >
+
+                          <Text
+                            style={
+                              styles.chatBadgeText
+                            }
+                          >
+
+                            {mensajesNoLeidos >
+                              9
+                              ? "9+"
+                              : mensajesNoLeidos}
+
+                          </Text>
+
+                        </View>
+
+                      )}
+
                   </View>
-                )}
+
+
+                  <Text
+                    style={
+                      styles.chatButtonText
+                    }
+                  >
+                    Mensajes
+                  </Text>
+
+
+                  {mensajesNoLeidos >
+                    0 && (
+
+                      <View
+                        style={
+                          styles.messageDot
+                        }
+                      />
+
+                    )}
+
+                </TouchableOpacity>
+
+              )}
+
+
+              {/* =================================================
+                ACCIONES SERVICIO
+            ================================================= */}
+
+              <View
+                style={
+                  styles.servicioActionsRow
+                }
+              >
+
+                <TouchableOpacity
+
+                  style={
+                    styles.clienteNoLocalizadoButton
+                  }
+
+                  onPress={
+                    clienteNoLocalizado
+                  }
+
+                  activeOpacity={0.85}
+
+                >
+
+                  <Ionicons
+                    name="person-remove-outline"
+                    size={17}
+                    color="#b91c1c"
+                  />
+
+
+                  <Text
+                    style={
+                      styles.clienteNoLocalizadoText
+                    }
+                  >
+                    No localizado
+                  </Text>
+
+                </TouchableOpacity>
+
+
+                <TouchableOpacity
+
+                  style={
+                    styles.finishButton
+                  }
+
+                  onPress={
+                    abrirCerrarServicio
+                  }
+
+                  activeOpacity={0.85}
+
+                >
+
+                  <Ionicons
+                    name="checkmark-done-outline"
+                    size={18}
+                    color="#ffffff"
+                  />
+
+
+                  <Text
+                    style={
+                      styles.finishButtonText
+                    }
+                  >
+                    Finalizar
+                  </Text>
+
+                </TouchableOpacity>
+
               </View>
 
-              <Text style={styles.chatButtonText}>
-                Mensaje
-              </Text>
+            </View>
 
-              {mensajesNoLeidos > 0 && (
-                <View style={styles.messageDot} />
-              )}
-            </TouchableOpacity>
           )}
+
         </View>
 
+        {/* =================================================
+          RESERVAS
+      ================================================= */}
+
         <TouchableOpacity
-  style={styles.reservasButton}
-  onPress={() =>
-    setMostrarReservas(
-      true
-    )
-  }
->
 
-  <View
-    style={
-      styles.reservasIconWrap
-    }
-  >
+          style={
+            styles.reservasButton
+          }
 
-    <Ionicons
-      name="calendar-outline"
-      size={21}
-      color="#111827"
-    />
+          onPress={() => {
+            setPestañaReservasInicial(
+              "disponibles"
+            );
 
+            setMostrarReservas(
+              true
+            );
+          }}
 
-    {reservasPendientes > 0 && (
+          activeOpacity={0.85}
 
-      <View
-        style={
-          styles.reservasDot
-        }
-      />
+        >
 
-    )}
+          <View
+            style={
+              styles.reservasIconWrap
+            }
+          >
 
-  </View>
+            <Ionicons
+              name="calendar-outline"
+              size={19}
+              color="#111827"
+            />
 
 
-  <View
-    style={{
-      flex: 1,
-    }}
-  >
+            {reservasPendientes >
+              0 && (
 
-    <Text
-      style={
-        styles.reservasButtonTitle
-      }
-    >
-      Reservas
-    </Text>
+                <View
+                  style={
+                    styles.reservasDot
+                  }
+                />
 
+              )}
 
-    <Text
-      style={
-        styles.reservasButtonSubtitle
-      }
-    >
-
-      {reservasPendientes > 0
-        ? `${reservasPendientes} disponible${reservasPendientes === 1 ? "" : "s"}`
-        : "No hay reservas disponibles"}
-
-    </Text>
-
-  </View>
+          </View>
 
 
-  <Ionicons
-    name="chevron-forward"
-    size={20}
-    color="#94a3b8"
-  />
+          <View
+            style={{
+              flex: 1,
+            }}
+          >
 
-</TouchableOpacity>
+            <Text
+              style={
+                styles.reservasButtonTitle
+              }
+            >
+              Reservas
+            </Text>
+
+
+            <Text
+              style={
+                styles.reservasButtonSubtitle
+              }
+              numberOfLines={1}
+            >
+
+              {reservasPendientes >
+                0
+                ? `${reservasPendientes} disponible${reservasPendientes ===
+                  1
+                  ? ""
+                  : "s"
+                }`
+                : "No hay reservas disponibles"}
+
+            </Text>
+
+          </View>
+
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color="#94a3b8"
+          />
+
+        </TouchableOpacity>
+
+        {proximaReserva && (
+
+          <TouchableOpacity
+
+            style={
+              styles.proximaReservaCard
+            }
+
+            onPress={() => {
+              setPestañaReservasInicial(
+                "mias"
+              );
+
+              setMostrarReservas(
+                true
+              );
+            }}
+
+            activeOpacity={0.85}
+
+          >
+
+            <View
+              style={
+                styles.proximaReservaIcon
+              }
+            >
+
+              <Ionicons
+                name="calendar-outline"
+                size={19}
+                color="#111827"
+              />
+
+            </View>
+
+
+            <View
+              style={{
+                flex: 1,
+              }}
+            >
+
+              <View
+                style={
+                  styles.proximaReservaTop
+                }
+              >
+
+                <Text
+                  style={
+                    styles.proximaReservaLabel
+                  }
+                >
+                  Próxima reserva
+                </Text>
+
+
+                <Text
+                  style={
+                    styles.proximaReservaHora
+                  }
+                >
+                  {formatearHoraReserva(
+                    proximaReserva.fechaHora
+                  )}
+                </Text>
+
+              </View>
+
+
+              <Text
+                style={
+                  styles.proximaReservaFecha
+                }
+              >
+                {formatearFechaReserva(
+                  proximaReserva.fechaHora
+                )}
+              </Text>
+
+
+              <Text
+                style={
+                  styles.proximaReservaDireccion
+                }
+                numberOfLines={1}
+              >
+                {proximaReserva.direccionBase ||
+                  proximaReserva.direccionRecogida ||
+                  "-"}
+              </Text>
+
+
+              <View
+                style={
+                  styles.proximaReservaBottom
+                }
+              >
+
+                {proximaReserva.precioFinal != null && (
+
+                  <Text
+                    style={
+                      styles.proximaReservaPrecio
+                    }
+                  >
+                    {proximaReserva.precioFinal} €
+                  </Text>
+
+                )}
+
+
+                {totalReservasMias > 1 && (
+
+                  <Text
+                    style={
+                      styles.proximaReservaMas
+                    }
+                  >
+                    +{totalReservasMias - 1} más
+                  </Text>
+
+                )}
+
+              </View>
+
+            </View>
+
+
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color="#94a3b8"
+            />
+
+          </TouchableOpacity>
+
+        )}
 
       </ScrollView>
+
+
+      {/* =================================================
+        MODAL FINALIZAR
+    ================================================= */}
+
       <Modal
-        visible={mostrarCerrarServicio}
+
+        visible={
+          mostrarCerrarServicio
+        }
+
         transparent
+
         animationType="fade"
+
         statusBarTranslucent
+
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Finalizar servicio</Text>
-            <Text style={styles.modalSubtitle}>
+
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+
+          <View
+            style={
+              styles.modalCard
+            }
+          >
+
+            <Text
+              style={
+                styles.modalTitle
+              }
+            >
+              Finalizar servicio
+            </Text>
+
+
+            <Text
+              style={
+                styles.modalSubtitle
+              }
+            >
               Introduce el coste final antes de cerrar el viaje.
             </Text>
 
+
             <TextInput
-              style={styles.modalInput}
+
+              style={
+                styles.modalInput
+              }
+
               placeholder="Ej. 8.50"
+
               keyboardType="decimal-pad"
-              value={costoFinalInput}
-              onChangeText={setCostoFinalInput}
+
+              value={
+                costoFinalInput
+              }
+
+              onChangeText={
+                setCostoFinalInput
+              }
+
             />
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalSecondaryButton}
-                onPress={() => {
-                  if (guardandoCierre) return;
-                  setMostrarCerrarServicio(false);
-                  setCostoFinalInput("");
-                }}
-              >
-                <Text style={styles.modalSecondaryText}>Cancelar</Text>
-              </TouchableOpacity>
+
+            <View
+              style={
+                styles.modalActions
+              }
+            >
 
               <TouchableOpacity
+
+                style={
+                  styles.modalSecondaryButton
+                }
+
+                onPress={() => {
+
+                  if (
+                    guardandoCierre
+                  ) {
+                    return;
+                  }
+
+                  setMostrarCerrarServicio(
+                    false
+                  );
+
+                  setCostoFinalInput(
+                    ""
+                  );
+
+                }}
+
+              >
+
+                <Text
+                  style={
+                    styles.modalSecondaryText
+                  }
+                >
+                  Cancelar
+                </Text>
+
+              </TouchableOpacity>
+
+
+              <TouchableOpacity
+
                 style={[
                   styles.modalPrimaryButton,
-                  guardandoCierre && { opacity: 0.7 },
+
+                  guardandoCierre && {
+                    opacity: 0.7,
+                  },
                 ]}
-                onPress={confirmarCerrarServicio}
-                disabled={guardandoCierre}
+
+                onPress={
+                  confirmarCerrarServicio
+                }
+
+                disabled={
+                  guardandoCierre
+                }
+
               >
-                <Text style={styles.modalPrimaryText}>
-                  {guardandoCierre ? "Guardando..." : "Finalizar"}
+
+                <Text
+                  style={
+                    styles.modalPrimaryText
+                  }
+                >
+
+                  {guardandoCierre
+                    ? "Guardando..."
+                    : "Finalizar"}
+
                 </Text>
+
               </TouchableOpacity>
+
             </View>
+
           </View>
+
         </View>
+
       </Modal>
+
     </SafeAreaView>
+
   );
+
 }
 
-const styles = StyleSheet.create({
-  appShell: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-
-  scrollContent: {
-    padding: 16,
-    flexGrow: 1,
-  },
-
-  appCard: {
-    width: "100%",
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 16 },
-    shadowRadius: 24,
-    elevation: 5,
-  },
-
-
-
-
-
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 8,
-  },
-
-  headerMain: {
-    flex: 1,
-    justifyContent: "center",
-  },
-
-  titleWrap: {
-    flex: 1,
-  },
-
-  eyebrow: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#64748b",
-    marginBottom: 4,
-  },
-
-  appTitle: {
-    fontSize: 32,
-    lineHeight: 36,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-
-  onlineBadge: {
-    minWidth: 110,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#eff6ff",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  onlineLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#64748b",
-    marginBottom: 2,
-  },
-
-  onlineValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#2563eb",
-  },
-
-  headerHelper: {
-    fontSize: 14,
-    color: "#64748b",
-    lineHeight: 20,
-  },
-
-  socketWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#f8fafc",
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-
-  socketDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-
-  socketDotOn: {
-    backgroundColor: "#16a34a",
-  },
-
-  socketDotOff: {
-    backgroundColor: "#dc2626",
-  },
-
-  socketText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#475569",
-  },
-
-  infoOperativa: {
-    marginBottom: 8,
-  },
-
-  infoPill: {
-    alignSelf: "flex-start",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-  },
-
-  infoDisponible: {
-    backgroundColor: "#ecfdf5",
-  },
-
-  infoDesconectado: {
-    backgroundColor: "#f1f5f9",
-  },
-
-  infoParada: {
-    backgroundColor: "#eff6ff",
-  },
-
-  infoServicio: {
-    backgroundColor: "#fef3c7",
-  },
-
-  infoPillText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-
-  infoExtra: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#64748b",
-    lineHeight: 20,
-  },
-
-  noticeCard: {
-    marginTop: 12,
-    backgroundColor: "#f8fafc",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-
-  noticeTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 4,
-  },
-
-  noticeText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-
-  noticeSubtext: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#64748b",
-  },
-
-  errorText: {
-    marginTop: 10,
-    color: "#dc2626",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  actionsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
-  },
-
-  stateButton: {
-    flex: 1,
-    minHeight: 112,
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 16,
-    justifyContent: "space-between",
-  },
-
-  stateButtonActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#93c5fd",
-  },
-
-  stateButtonDisabled: {
-    opacity: 0.5,
-  },
-
-  stateButtonTitle: {
-    marginTop: 10,
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-
-  stateButtonTitleActive: {
-    color: "#2563eb",
-  },
-
-  stateButtonText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#64748b",
-  },
-
-  tarjetaServicio: {
-    marginTop: 14,
-    padding: 14,          // antes 18
-    borderRadius: 18,     // antes 20
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-
-  tarjetaServicioHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-    gap: 10,
-  },
-
-  tarjetaServicioTitle: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-
-  tarjetaServicioBadge: {
-    backgroundColor: "#dcfce7",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-  },
-
-  tarjetaServicioBadgeText: {
-    color: "#166534",
-    fontWeight: "800",
-    fontSize: 12,
-  },
-
-  servicioItem: {
-    marginBottom: 8,
-  },
-
-  servicioLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#64748b",
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-
-  servicioValue: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0f172a",
-    lineHeight: 20,
-  },
-
-  finishButton: {
-    marginTop: 4,
-    backgroundColor: "#16a34a",
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-
-  finishButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  socketWarning: {
-    backgroundColor: "#fee2e2",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  socketWarningText: {
-    color: "#dc2626",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  modalSubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#64748b",
-  },
-  modalInput: {
-    marginTop: 16,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: "#0f172a",
-    backgroundColor: "#f8fafc",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 18,
-  },
-  modalSecondaryButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalSecondaryText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  modalPrimaryButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: "#111827",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalPrimaryText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  chatButton: {
-    marginTop: 12,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  chatButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  clienteNoLocalizadoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-
-  llamadaButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-
-  llamadaButtonTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1e3a8a",
-  },
-
-  llamadaButtonSubtitle: {
-    fontSize: 12,
-    color: "#64748b",
-    marginTop: 2,
-  },
-
-  clienteNoLocalizadoText: {
-    color: "#b91c1c",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  chatIconWrap: {
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  chatBadge: {
-    position: "absolute",
-    top: -7,
-    right: -9,
-
-    minWidth: 18,
-    height: 18,
-
-    borderRadius: 9,
-    backgroundColor: "#ef4444",
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    paddingHorizontal: 4,
-  },
-
-  chatBadgeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-
-  messageDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#ef4444",
-  },
-
-  reservasButton: {
-  marginTop: 12,
-
-  minHeight: 66,
-
-  paddingHorizontal: 14,
-
-  borderRadius: 17,
-
-  backgroundColor: "#fff",
-
-  borderWidth: 1,
-
-  borderColor: "#e2e8f0",
-
-  flexDirection: "row",
-
-  alignItems: "center",
-
-  gap: 11,
-},
-
-reservasIconWrap: {
-  width: 42,
-  height: 42,
-
-  borderRadius: 21,
-
-  backgroundColor: "#f1f5f9",
-
-  alignItems: "center",
-
-  justifyContent: "center",
-
-  position: "relative",
-},
-
-reservasDot: {
-  position: "absolute",
-
-  top: 1,
-  right: 1,
-
-  width: 10,
-  height: 10,
-
-  borderRadius: 5,
-
-  backgroundColor: "#ef4444",
-
-  borderWidth: 2,
-
-  borderColor: "#fff",
-},
-
-reservasButtonTitle: {
-  fontSize: 15,
-
-  fontWeight: "800",
-
-  color: "#111827",
-},
-
-reservasButtonSubtitle: {
-  marginTop: 2,
-
-  fontSize: 12,
-
-  color: "#64748b",
-},
-});
+function formatearFechaReserva(
+  valor
+) {
+
+  return new Date(
+    valor
+  ).toLocaleDateString(
+    "es-ES",
+    {
+      weekday:
+        "short",
+
+      day:
+        "numeric",
+
+      month:
+        "short",
+    }
+  );
+
+}
+
+
+function formatearHoraReserva(
+  valor
+) {
+
+  return new Date(
+    valor
+  ).toLocaleTimeString(
+    "es-ES",
+    {
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
+
+      hour12:
+        false,
+    }
+  );
+
+}
+
+
+/* =====================================================
+   STYLES
+===================================================== */
+
+const styles =
+  StyleSheet.create({
+
+    appShell: {
+      flex: 1,
+      backgroundColor: "#f8fafc",
+    },
+
+
+    scrollContent: {
+      paddingHorizontal: 10,
+      paddingTop: 8,
+      flexGrow: 1,
+    },
+
+
+    appCard: {
+      width: "100%",
+
+      backgroundColor: "#ffffff",
+
+      borderRadius: 18,
+
+      padding: 12,
+
+      borderWidth: 1,
+      borderColor: "#e5e7eb",
+
+      shadowColor: "#0f172a",
+
+      shadowOpacity: 0.05,
+
+      shadowOffset: {
+        width: 0,
+        height: 6,
+      },
+
+      shadowRadius: 12,
+
+      elevation: 3,
+    },
+
+
+    appCardServicioActivo: {
+      padding: 10,
+    },
+
+
+    topRow: {
+      flexDirection: "row",
+
+      justifyContent: "space-between",
+
+      alignItems: "center",
+
+      gap: 8,
+
+      marginBottom: 6,
+    },
+
+
+    headerMain: {
+      flex: 1,
+
+      justifyContent: "center",
+    },
+
+
+    eyebrow: {
+      fontSize: 10,
+
+      fontWeight: "700",
+
+      color: "#64748b",
+
+      marginBottom: 1,
+
+      textTransform: "uppercase",
+    },
+
+
+    appTitle: {
+      fontSize: 23,
+
+      lineHeight: 26,
+
+      fontWeight: "900",
+
+      color: "#0f172a",
+    },
+
+
+    onlineBadge: {
+      minWidth: 82,
+
+      paddingVertical: 5,
+
+      paddingHorizontal: 9,
+
+      borderRadius: 12,
+
+      backgroundColor: "#eff6ff",
+
+      borderWidth: 1,
+
+      borderColor: "#bfdbfe",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+    },
+
+
+    onlineLabel: {
+      fontSize: 9,
+
+      fontWeight: "700",
+
+      color: "#64748b",
+    },
+
+
+    onlineValue: {
+      marginTop: 1,
+
+      fontSize: 18,
+
+      lineHeight: 20,
+
+      fontWeight: "900",
+
+      color: "#2563eb",
+    },
+
+
+    infoOperativa: {
+      marginBottom: 3,
+    },
+
+
+    estadoParadaRow: {
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 8,
+    },
+
+
+    infoPill: {
+      alignSelf: "flex-start",
+
+      paddingVertical: 5,
+
+      paddingHorizontal: 9,
+
+      borderRadius: 999,
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 5,
+    },
+
+
+    infoDisponible: {
+      backgroundColor: "#ecfdf5",
+    },
+
+
+    infoDesconectado: {
+      backgroundColor: "#f1f5f9",
+    },
+
+
+    infoParada: {
+      backgroundColor: "#eff6ff",
+    },
+
+
+    infoServicio: {
+      backgroundColor: "#fef3c7",
+    },
+
+
+    infoPillText: {
+      fontSize: 11,
+
+      fontWeight: "800",
+
+      color: "#0f172a",
+    },
+
+
+    infoExtraInline: {
+      flex: 1,
+
+      fontSize: 11,
+
+      color: "#64748b",
+
+      fontWeight: "600",
+    },
+
+
+    infoExtra: {
+      marginTop: 4,
+
+      fontSize: 11,
+
+      color: "#64748b",
+
+      lineHeight: 15,
+    },
+
+
+    noticeCard: {
+      marginTop: 7,
+
+      backgroundColor: "#f8fafc",
+
+      borderRadius: 12,
+
+      paddingVertical: 8,
+
+      paddingHorizontal: 10,
+
+      borderWidth: 1,
+
+      borderColor: "#e2e8f0",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 8,
+    },
+
+
+    noticeTitle: {
+      fontSize: 11,
+
+      fontWeight: "800",
+
+      color: "#0f172a",
+    },
+
+
+    noticeText: {
+      marginTop: 1,
+
+      fontSize: 12,
+
+      fontWeight: "700",
+
+      color: "#0f172a",
+    },
+
+
+    noticeCountdown: {
+      fontSize: 17,
+
+      fontWeight: "900",
+
+      color: "#2563eb",
+    },
+
+
+    errorText: {
+      marginTop: 5,
+
+      color: "#dc2626",
+
+      fontSize: 11,
+
+      fontWeight: "600",
+    },
+
+
+    /* =================================================
+       BOTONES ESTADO
+    ================================================= */
+
+    actionsRow: {
+      flexDirection: "row",
+
+      gap: 8,
+
+      marginTop: 8,
+    },
+
+
+    stateButton: {
+      flex: 1,
+
+      minHeight: 58,
+
+      backgroundColor: "#ffffff",
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      borderColor: "#e2e8f0",
+
+      paddingHorizontal: 10,
+
+      paddingVertical: 8,
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 8,
+    },
+
+
+    stateButtonActive: {
+      backgroundColor: "#eff6ff",
+
+      borderColor: "#93c5fd",
+    },
+
+
+    stateButtonDisabled: {
+      opacity: 0.5,
+    },
+
+
+    stateButtonTitle: {
+      fontSize: 13,
+
+      fontWeight: "800",
+
+      color: "#0f172a",
+    },
+
+
+    stateButtonTitleActive: {
+      color: "#2563eb",
+    },
+
+
+    stateButtonText: {
+      marginTop: 1,
+
+      fontSize: 10,
+
+      color: "#64748b",
+    },
+
+
+    /* =================================================
+       SERVICIO ACTIVO
+    ================================================= */
+
+    tarjetaServicio: {
+      marginTop: 7,
+
+      padding: 10,
+
+      borderRadius: 15,
+
+      backgroundColor: "#f8fafc",
+
+      borderWidth: 1,
+
+      borderColor: "#e2e8f0",
+    },
+
+
+    tarjetaServicioHeader: {
+      flexDirection: "row",
+
+      justifyContent: "space-between",
+
+      alignItems: "center",
+
+      marginBottom: 7,
+
+      gap: 8,
+    },
+
+
+    tarjetaServicioTitle: {
+      fontSize: 16,
+
+      fontWeight: "900",
+
+      color: "#0f172a",
+    },
+
+
+    tarjetaServicioBadge: {
+      backgroundColor: "#dcfce7",
+
+      paddingVertical: 4,
+
+      paddingHorizontal: 8,
+
+      borderRadius: 999,
+    },
+
+
+    tarjetaServicioBadgeText: {
+      color: "#166534",
+
+      fontWeight: "800",
+
+      fontSize: 10,
+    },
+
+
+    servicioItemRow: {
+      minHeight: 31,
+
+      paddingVertical: 4,
+
+      borderTopWidth: 1,
+
+      borderTopColor: "#e2e8f0",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 6,
+    },
+
+
+    servicioLabelInline: {
+      width: 64,
+
+      fontSize: 9,
+
+      fontWeight: "800",
+
+      color: "#64748b",
+
+      textTransform: "uppercase",
+    },
+
+
+    servicioValueInline: {
+      flex: 1,
+
+      fontSize: 12,
+
+      lineHeight: 16,
+
+      fontWeight: "700",
+
+      color: "#0f172a",
+    },
+
+
+    /* =================================================
+       AUDIO
+    ================================================= */
+
+    llamadaButton: {
+      minHeight: 39,
+
+      marginTop: 7,
+
+      paddingHorizontal: 10,
+
+      borderRadius: 12,
+
+      backgroundColor: "#eff6ff",
+
+      borderWidth: 1,
+
+      borderColor: "#bfdbfe",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      gap: 7,
+    },
+
+
+    llamadaButtonTitle: {
+      fontSize: 12,
+
+      fontWeight: "800",
+
+      color: "#1e3a8a",
+    },
+
+
+    /* =================================================
+       CHAT
+    ================================================= */
+
+    chatButton: {
+      marginTop: 7,
+
+      minHeight: 39,
+
+      borderRadius: 12,
+
+      backgroundColor: "#ffffff",
+
+      borderWidth: 1,
+
+      borderColor: "#e2e8f0",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      gap: 7,
+    },
+
+
+    chatButtonText: {
+      fontSize: 12,
+
+      fontWeight: "800",
+
+      color: "#111827",
+    },
+
+
+    chatIconWrap: {
+      position: "relative",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+    },
+
+
+    chatBadge: {
+      position: "absolute",
+
+      top: -7,
+
+      right: -9,
+
+      minWidth: 17,
+
+      height: 17,
+
+      borderRadius: 9,
+
+      backgroundColor: "#ef4444",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      paddingHorizontal: 4,
+    },
+
+
+    chatBadgeText: {
+      color: "#ffffff",
+
+      fontSize: 9,
+
+      fontWeight: "800",
+    },
+
+
+    messageDot: {
+      width: 7,
+
+      height: 7,
+
+      borderRadius: 4,
+
+      backgroundColor: "#ef4444",
+    },
+
+
+    /* =================================================
+       BOTONES SERVICIO
+    ================================================= */
+
+    servicioActionsRow: {
+      marginTop: 7,
+
+      flexDirection: "row",
+
+      gap: 7,
+    },
+
+
+    clienteNoLocalizadoButton: {
+      flex: 1,
+
+      minHeight: 42,
+
+      paddingHorizontal: 8,
+
+      borderRadius: 12,
+
+      borderWidth: 1,
+
+      borderColor: "#fecaca",
+
+      backgroundColor: "#fef2f2",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      gap: 5,
+    },
+
+
+    clienteNoLocalizadoText: {
+      color: "#b91c1c",
+
+      fontSize: 11,
+
+      fontWeight: "800",
+    },
+
+
+    finishButton: {
+      flex: 1,
+
+      minHeight: 42,
+
+      paddingHorizontal: 8,
+
+      backgroundColor: "#16a34a",
+
+      borderRadius: 12,
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      gap: 5,
+    },
+
+
+    finishButtonText: {
+      color: "#ffffff",
+
+      fontSize: 12,
+
+      fontWeight: "800",
+    },
+
+
+    /* =================================================
+       RESERVAS
+    ================================================= */
+
+    reservasButton: {
+      marginTop: 8,
+
+      minHeight: 50,
+
+      paddingHorizontal: 11,
+
+      borderRadius: 14,
+
+      backgroundColor: "#fff",
+
+      borderWidth: 1,
+
+      borderColor: "#e2e8f0",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 9,
+    },
+
+
+    reservasIconWrap: {
+      width: 34,
+
+      height: 34,
+
+      borderRadius: 17,
+
+      backgroundColor: "#f1f5f9",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      position: "relative",
+    },
+
+
+    reservasDot: {
+      position: "absolute",
+
+      top: 0,
+
+      right: 0,
+
+      width: 9,
+
+      height: 9,
+
+      borderRadius: 5,
+
+      backgroundColor: "#ef4444",
+
+      borderWidth: 2,
+
+      borderColor: "#fff",
+    },
+
+
+    reservasButtonTitle: {
+      fontSize: 13,
+
+      fontWeight: "800",
+
+      color: "#111827",
+    },
+
+
+    reservasButtonSubtitle: {
+      marginTop: 1,
+
+      fontSize: 10,
+
+      color: "#64748b",
+    },
+
+
+    /* =================================================
+       MODAL
+    ================================================= */
+
+    modalOverlay: {
+      flex: 1,
+
+      backgroundColor:
+        "rgba(15, 23, 42, 0.45)",
+
+      justifyContent: "center",
+
+      alignItems: "center",
+
+      padding: 20,
+    },
+
+
+    modalCard: {
+      width: "100%",
+
+      maxWidth: 420,
+
+      backgroundColor: "#ffffff",
+
+      borderRadius: 20,
+
+      padding: 18,
+    },
+
+
+    modalTitle: {
+      fontSize: 20,
+
+      fontWeight: "800",
+
+      color: "#0f172a",
+    },
+
+
+    modalSubtitle: {
+      marginTop: 6,
+
+      fontSize: 13,
+
+      lineHeight: 18,
+
+      color: "#64748b",
+    },
+
+
+    modalInput: {
+      marginTop: 14,
+
+      height: 48,
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      borderColor: "#cbd5e1",
+
+      paddingHorizontal: 13,
+
+      fontSize: 15,
+
+      color: "#0f172a",
+
+      backgroundColor: "#f8fafc",
+    },
+
+
+    modalActions: {
+      flexDirection: "row",
+
+      gap: 10,
+
+      marginTop: 15,
+    },
+
+
+    modalSecondaryButton: {
+      flex: 1,
+
+      height: 44,
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      borderColor: "#cbd5e1",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+    },
+
+
+    modalSecondaryText: {
+      fontSize: 14,
+
+      fontWeight: "700",
+
+      color: "#0f172a",
+    },
+
+
+    modalPrimaryButton: {
+      flex: 1,
+
+      height: 44,
+
+      borderRadius: 14,
+
+      backgroundColor: "#111827",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+    },
+
+
+    modalPrimaryText: {
+      fontSize: 14,
+
+      fontWeight: "700",
+
+      color: "#ffffff",
+    },
+
+    proximaReservaCard: {
+      marginTop: 8,
+
+      minHeight: 72,
+
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+
+      borderRadius: 14,
+
+      backgroundColor: "#fff7ed",
+
+      borderWidth: 1,
+      borderColor: "#fed7aa",
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 9,
+    },
+
+    proximaReservaIcon: {
+      width: 36,
+      height: 36,
+
+      borderRadius: 18,
+
+      backgroundColor: "#ffedd5",
+
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    proximaReservaTop: {
+      flexDirection: "row",
+
+      justifyContent: "space-between",
+
+      alignItems: "center",
+
+      gap: 8,
+    },
+
+    proximaReservaLabel: {
+      fontSize: 11,
+
+      fontWeight: "800",
+
+      color: "#9a3412",
+
+      textTransform: "uppercase",
+    },
+
+    proximaReservaHora: {
+      fontSize: 14,
+
+      fontWeight: "900",
+
+      color: "#111827",
+    },
+
+    proximaReservaFecha: {
+      marginTop: 1,
+
+      fontSize: 11,
+
+      fontWeight: "700",
+
+      color: "#64748b",
+
+      textTransform: "capitalize",
+    },
+
+    proximaReservaDireccion: {
+      marginTop: 2,
+
+      fontSize: 13,
+
+      fontWeight: "800",
+
+      color: "#111827",
+    },
+
+    proximaReservaBottom: {
+      marginTop: 3,
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 8,
+    },
+
+    proximaReservaPrecio: {
+      fontSize: 12,
+
+      fontWeight: "800",
+
+      color: "#166534",
+    },
+
+    proximaReservaMas: {
+      fontSize: 11,
+
+      fontWeight: "700",
+
+      color: "#64748b",
+    },
+
+  });

@@ -503,32 +503,6 @@ export default function ReservasScreen() {
                         Cuando reserves un taxi, podrás consultar aquí su estado.
                     </Text>
 
-
-                    <TouchableOpacity
-                        style={
-                            styles.homeButton
-                        }
-                        onPress={() =>
-                            router.replace("/")
-                        }
-                    >
-
-                        <Ionicons
-                            name="calendar-outline"
-                            size={18}
-                            color="#fff"
-                        />
-
-                        <Text
-                            style={
-                                styles.homeButtonText
-                            }
-                        >
-                            Hacer una reserva
-                        </Text>
-
-                    </TouchableOpacity>
-
                 </View>
 
             ) : (

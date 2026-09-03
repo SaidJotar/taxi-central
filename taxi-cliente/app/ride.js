@@ -52,6 +52,8 @@ export default function RideScreen() {
     const [seguirTaxi, setSeguirTaxi] = useState(true);
     const [ultimoTaxiCoords, setUltimoTaxiCoords] = useState(null);
 
+    const sinTaxiAvisadoRef = useRef(false);
+
     const mensajesInicializadosRef = useRef(false);
     const ultimoMensajeTaxistaRef = useRef(null);
 
@@ -84,6 +86,57 @@ export default function RideScreen() {
             setLoading(false);
         }
     }, [detenerPolling, solicitudId]);
+
+    useEffect(() => {
+
+        if (
+            solicitud?.estado !==
+            "sin_taxista"
+        ) {
+
+            sinTaxiAvisadoRef.current =
+                false;
+
+            return;
+        }
+
+
+        if (
+            sinTaxiAvisadoRef.current
+        ) {
+
+            return;
+        }
+
+
+        sinTaxiAvisadoRef.current =
+            true;
+
+
+        Alert.alert(
+            "No hay taxis disponibles",
+
+            "Ningún taxista ha podido aceptar tu solicitud en este momento. Puedes volver a intentarlo.",
+
+            [
+                {
+                    text:
+                        "Volver al inicio",
+
+                    onPress: () =>
+                        volverInicio(),
+                },
+            ],
+
+            {
+                cancelable:
+                    false,
+            }
+        );
+
+    }, [
+        solicitud?.estado,
+    ]);
 
     useEffect(() => {
         cargarEstado();

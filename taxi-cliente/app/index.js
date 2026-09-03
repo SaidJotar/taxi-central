@@ -24,6 +24,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   router,
   useLocalSearchParams,
+  useFocusEffect,
 } from "expo-router";
 
 import { api } from "../src/api/client";
@@ -87,6 +88,9 @@ export default function HomeScreen() {
 
   const params = useLocalSearchParams();
 
+  const [tieneReservasActivas, setTieneReservasActivas] =
+    useState(false);
+
 
   /*
    * UBICACIÓN
@@ -146,13 +150,220 @@ export default function HomeScreen() {
     setAccionTrasTelefono,
   ] = useState(null);
 
-
   /*
    * TECLADO
    */
   const [keyboardHeight, setKeyboardHeight] =
     useState(0);
 
+
+  /*
+   * =====================================================
+   * COMPROBAR RESERVAS ACTIVAS
+   * =====================================================
+   *
+   * El punto rojo solamente debe aparecer si existe
+   * al menos una reserva:
+   *
+   * - pendiente
+   * - aceptada
+   *
+   * No cuentan:
+   *
+   * - cancelada
+   * - completada
+   */
+  const comprobarReservasActivas =
+    useCallback(async (telefono) => {
+
+      if (!telefono) {
+
+        setTieneReservasActivas(
+          false
+        );
+
+        return;
+      }
+
+
+      try {
+
+        const res =
+          await api.getReservasCliente(
+            telefono
+          );
+
+
+        const reservas =
+          Array.isArray(
+            res?.reservas
+          )
+            ? res.reservas
+            : [];
+
+
+        const activas =
+          reservas.filter(
+            (reserva) => {
+
+              const estado =
+                String(
+                  reserva?.estado ||
+                  ""
+                ).toLowerCase();
+
+
+              return (
+                estado === "pendiente" ||
+                estado === "aceptada"
+              );
+
+            }
+          );
+
+
+        console.log(
+          "📅 Reservas cliente:",
+          reservas.map(
+            (reserva) => ({
+              id:
+                reserva.id,
+
+              estado:
+                reserva.estado,
+
+              fechaHora:
+                reserva.fechaHora,
+            })
+          )
+        );
+
+
+        console.log(
+          "🔴 Reservas activas:",
+          activas.length
+        );
+
+
+        /*
+         * IMPORTANTE:
+         *
+         * Si no queda ninguna reserva,
+         * esto pone explícitamente false.
+         */
+        setTieneReservasActivas(
+          activas.length > 0
+        );
+
+
+      } catch (error) {
+
+        console.log(
+          "Error comprobando reservas:",
+          error.message
+        );
+
+
+        /*
+         * Si falla la consulta no dejamos
+         * un punto rojo antiguo.
+         */
+        setTieneReservasActivas(
+          false
+        );
+
+      }
+
+    }, []);
+
+
+  /*
+   * =====================================================
+   * ACTUALIZAR RESERVAS AL VOLVER A INICIO
+   * =====================================================
+   *
+   * Esto NO toca el GPS.
+   *
+   * Cada vez que index.js vuelve a estar visible:
+   *
+   * /reservas
+   *     ↓ atrás
+   * /index
+   *
+   * consultamos únicamente las reservas.
+   */
+  useFocusEffect(
+
+    useCallback(() => {
+
+      let pantallaActiva =
+        true;
+
+
+      async function actualizar() {
+
+        if (!telefonoCliente) {
+
+          if (
+            pantallaActiva
+          ) {
+
+            setTieneReservasActivas(
+              false
+            );
+
+          }
+
+          return;
+        }
+
+
+        try {
+
+          await comprobarReservasActivas(
+            telefonoCliente
+          );
+
+
+        } catch (error) {
+
+          console.log(
+            "Error actualizando reservas al volver:",
+            error.message
+          );
+
+
+          if (
+            pantallaActiva
+          ) {
+
+            setTieneReservasActivas(
+              false
+            );
+
+          }
+
+        }
+
+      }
+
+
+      actualizar();
+
+
+      return () => {
+
+        pantallaActiva =
+          false;
+
+      };
+
+    }, [
+      telefonoCliente,
+      comprobarReservasActivas,
+    ])
+
+  );
 
   /*
    * =====================================================
@@ -316,9 +527,17 @@ export default function HomeScreen() {
 
         if (telefono) {
 
-          setTelefonoCliente(telefono);
+          setTelefonoCliente(
+            telefono
+          );
 
-          setTelefonoInput(telefono);
+          setTelefonoInput(
+            telefono
+          );
+
+          await comprobarReservasActivas(
+            telefono
+          );
 
         }
 
@@ -336,7 +555,7 @@ export default function HomeScreen() {
 
     cargarTelefonoGuardado();
 
-  }, []);
+  }, [comprobarReservasActivas]);
 
 
   /*
@@ -1070,6 +1289,10 @@ export default function HomeScreen() {
         telefono
       );
 
+      await comprobarReservasActivas(
+        telefono
+      );
+
 
       /*
        * Cerramos modal.
@@ -1553,20 +1776,36 @@ export default function HomeScreen() {
 
 
                 <TouchableOpacity
-                  style={styles.reservationHalfButton}
+                  style={[
+                    styles.reservationHalfButton,
+                    styles.misReservasButton,
+                  ]}
                   onPress={abrirMisReservas}
                 >
+
+                  {tieneReservasActivas && (
+                    <View
+                      style={
+                        styles.reservaNotificationDot
+                      }
+                    />
+                  )}
+
                   <Ionicons
                     name="list-outline"
                     size={18}
                     color="#111827"
                   />
 
-                  <Text style={styles.reservationHalfText}>
+                  <Text
+                    style={
+                      styles.reservationHalfText
+                    }
+                  >
                     Mis reservas
                   </Text>
-                </TouchableOpacity>
 
+                </TouchableOpacity>
               </View>
 
 
@@ -2439,5 +2678,27 @@ const styles = StyleSheet.create({
     fontWeight: "800",
 
     color: "#111827",
+  },
+  misReservasButton: {
+    position: "relative",
+  },
+
+  reservaNotificationDot: {
+    position: "absolute",
+
+    top: 7,
+    right: 10,
+
+    width: 9,
+    height: 9,
+
+    borderRadius: 5,
+
+    backgroundColor: "#ef4444",
+
+    borderWidth: 2,
+    borderColor: "#ffffff",
+
+    zIndex: 10,
   },
 });

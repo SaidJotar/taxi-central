@@ -1,6 +1,7 @@
 import React, {
     useCallback,
     useEffect,
+    useMemo,
     useState,
 } from "react";
 
@@ -30,8 +31,10 @@ import {
     getSocket,
 } from "../api/socket";
 
+
 export default function ReservasTaxistaScreen({
     onClose,
+    pestañaInicial = "disponibles",
 }) {
 
     const {
@@ -46,7 +49,7 @@ export default function ReservasTaxistaScreen({
 
 
     const socket =
-        React.useMemo(
+        useMemo(
             () =>
                 getSocket(token),
             [token]
@@ -54,10 +57,10 @@ export default function ReservasTaxistaScreen({
 
 
     const [
-        pestaña,
-        setPestaña,
+        pestana,
+        setPestana,
     ] = useState(
-        "disponibles"
+        pestañaInicial
     );
 
 
@@ -77,6 +80,12 @@ export default function ReservasTaxistaScreen({
         loading,
         setLoading,
     ] = useState(true);
+
+
+    const [
+        actualizando,
+        setActualizando,
+    ] = useState(false);
 
 
     const [
@@ -223,11 +232,15 @@ export default function ReservasTaxistaScreen({
      */
 
     const cargarTodo =
-        useCallback(async () => {
+        useCallback(async (
+            mostrarIndicador = false
+        ) => {
 
             try {
 
-                setLoading(true);
+                if (mostrarIndicador) {
+                    setActualizando(true);
+                }
 
 
                 await Promise.all([
@@ -248,12 +261,21 @@ export default function ReservasTaxistaScreen({
 
                 setLoading(false);
 
+                setActualizando(false);
+
             }
 
         }, [
             cargarDisponibles,
             cargarMias,
         ]);
+
+
+    /*
+     * =====================================================
+     * SOCKET
+     * =====================================================
+     */
 
     useEffect(() => {
 
@@ -262,6 +284,9 @@ export default function ReservasTaxistaScreen({
         }
 
 
+        /*
+         * Cliente cancela.
+         */
         const onReservaCancelada = (
             data
         ) => {
@@ -275,10 +300,6 @@ export default function ReservasTaxistaScreen({
             }
 
 
-            /*
-             * La quitamos tanto de disponibles
-             * como de nuestras reservas.
-             */
             setDisponibles(
                 (actual) =>
                     actual.filter(
@@ -301,14 +322,13 @@ export default function ReservasTaxistaScreen({
         };
 
 
+        /*
+         * Otro taxista acepta.
+         */
         const onReservaAceptada = (
             data
         ) => {
 
-            /*
-             * Otro taxista puede haberla
-             * aceptado.
-             */
             if (
                 !data?.reservaId
             ) {
@@ -328,6 +348,9 @@ export default function ReservasTaxistaScreen({
         };
 
 
+        /*
+         * Nueva reserva.
+         */
         const onNuevaReserva = () => {
 
             cargarDisponibles();
@@ -360,10 +383,12 @@ export default function ReservasTaxistaScreen({
                 onReservaCancelada
             );
 
+
             socket.off(
                 "reserva:aceptada",
                 onReservaAceptada
             );
+
 
             socket.off(
                 "reserva:nueva",
@@ -378,20 +403,21 @@ export default function ReservasTaxistaScreen({
     ]);
 
 
+    /*
+     * =====================================================
+     * CARGA INICIAL + POLLING
+     * =====================================================
+     */
+
     useEffect(() => {
 
         cargarTodo();
 
 
-        /*
-         * Refresco de seguridad.
-         *
-         * El socket actualizará instantáneamente,
-         * pero esto evita que se quede desactualizado.
-         */
         const interval =
             setInterval(
-                cargarTodo,
+                () =>
+                    cargarTodo(),
                 15000
             );
 
@@ -408,7 +434,7 @@ export default function ReservasTaxistaScreen({
 
     /*
      * =====================================================
-     * ACEPTAR RESERVA
+     * CONFIRMAR ACEPTACIÓN
      * =====================================================
      */
 
@@ -418,9 +444,11 @@ export default function ReservasTaxistaScreen({
 
         Alert.alert(
             "Aceptar reserva",
+
             `¿Quieres quedarte con la reserva del ${formatearFechaCompleta(
                 reserva.fechaHora
             )} por ${reserva.precioFinal} €?`,
+
             [
                 {
                     text:
@@ -445,6 +473,12 @@ export default function ReservasTaxistaScreen({
     }
 
 
+    /*
+     * =====================================================
+     * ACEPTAR RESERVA
+     * =====================================================
+     */
+
     async function aceptarReserva(
         reserva
     ) {
@@ -468,14 +502,8 @@ export default function ReservasTaxistaScreen({
                 );
 
 
-            Alert.alert(
-                "Reserva aceptada",
-                "La reserva ya está asignada a tu taxi."
-            );
-
-
             /*
-             * La quitamos de disponibles.
+             * Quitamos de disponibles.
              */
             setDisponibles(
                 (actual) =>
@@ -488,7 +516,7 @@ export default function ReservasTaxistaScreen({
 
 
             /*
-             * La metemos en Mis reservas.
+             * Añadimos a Mis reservas.
              */
             if (
                 res?.reserva
@@ -532,8 +560,14 @@ export default function ReservasTaxistaScreen({
             }
 
 
-            setPestaña(
+            setPestana(
                 "mias"
+            );
+
+
+            Alert.alert(
+                "Reserva aceptada",
+                "La reserva ya está asignada a tu taxi."
             );
 
 
@@ -546,10 +580,6 @@ export default function ReservasTaxistaScreen({
             );
 
 
-            /*
-             * Recargamos porque seguramente
-             * otro taxista se la quedó.
-             */
             await cargarTodo();
 
 
@@ -566,16 +596,22 @@ export default function ReservasTaxistaScreen({
 
     /*
      * =====================================================
-     * RENDER
+     * LISTA ACTUAL
      * =====================================================
      */
 
     const lista =
-        pestaña ===
+        pestana ===
             "disponibles"
             ? disponibles
             : mias;
 
+
+    /*
+     * =====================================================
+     * RENDER
+     * =====================================================
+     */
 
     return (
 
@@ -589,62 +625,56 @@ export default function ReservasTaxistaScreen({
             ]}
         >
 
-            {/* HEADER */}
+            {/* =================================================
+          SUBMENÚ DE INICIO
+      ================================================= */}
 
-            <View
-                style={
-                    styles.header
-                }
-            >
+            <View style={styles.reservasTopRow}>
 
                 <TouchableOpacity
-                    style={
-                        styles.backButton
-                    }
-                    onPress={
-                        onClose
-                    }
+                    style={styles.backButton}
+                    onPress={onClose}
                 >
-
                     <Ionicons
-                        name="chevron-back"
-                        size={26}
+                        name="arrow-back"
+                        size={21}
                         color="#111827"
                     />
-
                 </TouchableOpacity>
 
 
-                <Text
-                    style={
-                        styles.headerTitle
-                    }
-                >
+                <Text style={styles.reservasTopTitle}>
                     Reservas
                 </Text>
 
 
                 <TouchableOpacity
-                    style={
-                        styles.refreshButton
+                    style={styles.refreshButton}
+                    onPress={() =>
+                        cargarTodo(true)
                     }
-                    onPress={
-                        cargarTodo
-                    }
+                    disabled={actualizando}
                 >
-
-                    <Ionicons
-                        name="refresh-outline"
-                        size={22}
-                        color="#111827"
-                    />
-
+                    {actualizando ? (
+                        <ActivityIndicator
+                            size="small"
+                            color="#111827"
+                        />
+                    ) : (
+                        <Ionicons
+                            name="refresh-outline"
+                            size={20}
+                            color="#111827"
+                        />
+                    )}
                 </TouchableOpacity>
 
             </View>
 
 
-            {/* PESTAÑAS */}
+            {/* =================================================
+          PESTAÑAS
+      ================================================= */}
 
             <View
                 style={
@@ -653,18 +683,21 @@ export default function ReservasTaxistaScreen({
             >
 
                 <TouchableOpacity
+
                     style={[
                         styles.tab,
 
-                        pestaña ===
+                        pestana ===
                         "disponibles" &&
                         styles.tabActive,
                     ]}
+
                     onPress={() =>
-                        setPestaña(
+                        setPestana(
                             "disponibles"
                         )
                     }
+
                 >
 
                     <View
@@ -674,13 +707,15 @@ export default function ReservasTaxistaScreen({
                     >
 
                         <Text
+
                             style={[
                                 styles.tabText,
 
-                                pestaña ===
+                                pestana ===
                                 "disponibles" &&
                                 styles.tabTextActive,
                             ]}
+
                         >
                             Disponibles
                         </Text>
@@ -700,10 +735,12 @@ export default function ReservasTaxistaScreen({
                                             styles.tabBadgeText
                                         }
                                     >
+
                                         {disponibles.length >
                                             99
                                             ? "99+"
                                             : disponibles.length}
+
                                     </Text>
 
                                 </View>
@@ -716,28 +753,33 @@ export default function ReservasTaxistaScreen({
 
 
                 <TouchableOpacity
+
                     style={[
                         styles.tab,
 
-                        pestaña ===
+                        pestana ===
                         "mias" &&
                         styles.tabActive,
                     ]}
+
                     onPress={() =>
-                        setPestaña(
+                        setPestana(
                             "mias"
                         )
                     }
+
                 >
 
                     <Text
+
                         style={[
                             styles.tabText,
 
-                            pestaña ===
+                            pestana ===
                             "mias" &&
                             styles.tabTextActive,
                         ]}
+
                     >
                         Mis reservas
                     </Text>
@@ -747,7 +789,9 @@ export default function ReservasTaxistaScreen({
             </View>
 
 
-            {/* CONTENIDO */}
+            {/* =================================================
+          LOADING
+      ================================================= */}
 
             {loading ? (
 
@@ -762,6 +806,7 @@ export default function ReservasTaxistaScreen({
                         color="#111827"
                     />
 
+
                     <Text
                         style={
                             styles.loadingText
@@ -772,7 +817,14 @@ export default function ReservasTaxistaScreen({
 
                 </View>
 
-            ) : lista.length === 0 ? (
+            ) : lista.length ===
+                0 ? (
+
+                /*
+                 * =================================================
+                 * VACÍO
+                 * =================================================
+                 */
 
                 <View
                     style={
@@ -788,7 +840,7 @@ export default function ReservasTaxistaScreen({
 
                         <Ionicons
                             name="calendar-outline"
-                            size={38}
+                            size={32}
                             color="#64748b"
                         />
 
@@ -801,7 +853,7 @@ export default function ReservasTaxistaScreen({
                         }
                     >
 
-                        {pestaña ===
+                        {pestana ===
                             "disponibles"
                             ? "No hay reservas disponibles"
                             : "No tienes reservas"}
@@ -815,9 +867,9 @@ export default function ReservasTaxistaScreen({
                         }
                     >
 
-                        {pestaña ===
+                        {pestana ===
                             "disponibles"
-                            ? "Cuando un cliente cree una reserva aparecerá aquí."
+                            ? "Cuando un cliente reserve un taxi aparecerá aquí."
                             : "Las reservas que aceptes aparecerán aquí."}
 
                     </Text>
@@ -826,13 +878,22 @@ export default function ReservasTaxistaScreen({
 
             ) : (
 
+                /*
+                 * =================================================
+                 * RESERVAS
+                 * =================================================
+                 */
+
                 <ScrollView
+
                     contentContainerStyle={
                         styles.content
                     }
+
                     showsVerticalScrollIndicator={
                         false
                     }
+
                 >
 
                     {lista.map(
@@ -841,6 +902,7 @@ export default function ReservasTaxistaScreen({
                         ) => (
 
                             <ReservaCard
+
                                 key={
                                     reserva.id
                                 }
@@ -850,7 +912,7 @@ export default function ReservasTaxistaScreen({
                                 }
 
                                 esDisponible={
-                                    pestaña ===
+                                    pestana ===
                                     "disponibles"
                                 }
 
@@ -864,6 +926,7 @@ export default function ReservasTaxistaScreen({
                                         reserva
                                     )
                                 }
+
                             />
 
                         )
@@ -882,7 +945,7 @@ export default function ReservasTaxistaScreen({
 
 /*
  * =====================================================
- * TARJETA
+ * CARD RESERVA
  * =====================================================
  */
 
@@ -900,6 +963,8 @@ function ReservaCard({
                 styles.card
             }
         >
+
+            {/* FECHA + PRECIO */}
 
             <View
                 style={
@@ -966,6 +1031,8 @@ function ReservaCard({
             </View>
 
 
+            {/* RECOGIDA */}
+
             <View
                 style={
                     styles.infoRow
@@ -980,7 +1047,7 @@ function ReservaCard({
 
                     <Ionicons
                         name="location-outline"
-                        size={19}
+                        size={18}
                         color="#111827"
                     />
 
@@ -1016,33 +1083,60 @@ function ReservaCard({
 
             </View>
 
-            <View style={styles.phoneRow}>
 
-                <View style={styles.phoneIcon}>
+            {/* TELÉFONO */}
+
+            <View
+                style={
+                    styles.phoneRow
+                }
+            >
+
+                <View
+                    style={
+                        styles.phoneIcon
+                    }
+                >
 
                     <Ionicons
                         name="call-outline"
-                        size={18}
+                        size={17}
                         color="#111827"
                     />
 
                 </View>
 
 
-                <View style={{ flex: 1 }}>
+                <View
+                    style={{
+                        flex: 1,
+                    }}
+                >
 
-                    <Text style={styles.smallLabel}>
+                    <Text
+                        style={
+                            styles.smallLabel
+                        }
+                    >
                         Teléfono cliente
                     </Text>
 
-                    <Text style={styles.phoneValue}>
-                        {reserva.telefonoCliente || "-"}
+
+                    <Text
+                        style={
+                            styles.phoneValue
+                        }
+                    >
+                        {reserva.telefonoCliente ||
+                            "-"}
                     </Text>
 
                 </View>
 
             </View>
 
+
+            {/* REFERENCIA */}
 
             {reserva.referenciaRecogida ? (
 
@@ -1058,6 +1152,7 @@ function ReservaCard({
                         color="#64748b"
                     />
 
+
                     <Text
                         style={
                             styles.referenceText
@@ -1071,9 +1166,12 @@ function ReservaCard({
             ) : null}
 
 
+            {/* BOTÓN */}
+
             {esDisponible ? (
 
                 <TouchableOpacity
+
                     style={[
                         styles.acceptButton,
 
@@ -1082,12 +1180,15 @@ function ReservaCard({
                                 0.6,
                         },
                     ]}
+
                     disabled={
                         aceptando
                     }
+
                     onPress={
                         onAceptar
                     }
+
                 >
 
                     {aceptando ? (
@@ -1102,9 +1203,10 @@ function ReservaCard({
 
                             <Ionicons
                                 name="checkmark-circle-outline"
-                                size={20}
+                                size={19}
                                 color="#fff"
                             />
+
 
                             <Text
                                 style={
@@ -1130,9 +1232,10 @@ function ReservaCard({
 
                     <Ionicons
                         name="checkmark-circle"
-                        size={19}
+                        size={18}
                         color="#166534"
                     />
+
 
                     <Text
                         style={
@@ -1248,49 +1351,72 @@ const styles =
 
         container: {
             flex: 1,
+
             backgroundColor:
                 "#f8fafc",
         },
 
-        header: {
-            height: 60,
 
-            paddingHorizontal:
-                12,
+        /*
+         * SUBMENÚ
+         */
 
-            backgroundColor:
-                "#fff",
-
-            flexDirection:
-                "row",
+        backButton: {
+            width: 38,
+            height: 38,
 
             alignItems:
                 "center",
 
             justifyContent:
-                "space-between",
+                "center",
+        },
 
-            borderBottomWidth:
-                1,
+        reservasTopRow: {
+            height: 46,
 
-            borderBottomColor:
-                "#e2e8f0",
+            paddingHorizontal: 8,
+
+            flexDirection: "row",
+
+            alignItems: "center",
+
+            backgroundColor: "#f8fafc",
         },
 
         backButton: {
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
 
-            alignItems:
-                "center",
+            alignItems: "center",
 
-            justifyContent:
-                "center",
+            justifyContent: "center",
+        },
+
+        reservasTopTitle: {
+            flex: 1,
+
+            fontSize: 15,
+
+            fontWeight: "800",
+
+            color: "#111827",
+
+            marginLeft: 2,
         },
 
         refreshButton: {
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
+
+            alignItems: "center",
+
+            justifyContent: "center",
+        },
+
+        refreshButton: {
+            width: 38,
+            height: 38,
 
             alignItems:
                 "center",
@@ -1299,40 +1425,35 @@ const styles =
                 "center",
         },
 
-        headerTitle: {
-            fontSize: 18,
 
-            fontWeight:
-                "800",
-
-            color:
-                "#111827",
-        },
+        /*
+         * PESTAÑAS
+         */
 
         tabs: {
-            margin:
-                12,
+            marginHorizontal: 10,
 
-            padding:
-                4,
+            marginTop: 2,
 
-            borderRadius:
-                15,
+            marginBottom: 7,
 
-            backgroundColor:
-                "#e2e8f0",
+            padding: 3,
 
-            flexDirection:
-                "row",
+            borderRadius: 12,
+
+            backgroundColor: "#e2e8f0",
+
+            flexDirection: "row",
         },
+
 
         tab: {
             flex: 1,
 
-            minHeight: 43,
+            minHeight: 37,
 
             borderRadius:
-                12,
+                9,
 
             alignItems:
                 "center",
@@ -1340,11 +1461,13 @@ const styles =
             justifyContent:
                 "center",
         },
+
 
         tabActive: {
             backgroundColor:
                 "#ffffff",
         },
+
 
         tabRow: {
             flexDirection:
@@ -1354,11 +1477,12 @@ const styles =
                 "center",
 
             gap:
-                6,
+                5,
         },
 
+
         tabText: {
-            fontSize: 13,
+            fontSize: 12,
 
             fontWeight:
                 "700",
@@ -1367,21 +1491,23 @@ const styles =
                 "#64748b",
         },
 
+
         tabTextActive: {
             color:
                 "#111827",
         },
 
-        tabBadge: {
-            minWidth: 20,
 
-            height: 20,
+        tabBadge: {
+            minWidth: 18,
+
+            height: 18,
 
             borderRadius:
-                10,
+                9,
 
             paddingHorizontal:
-                5,
+                4,
 
             backgroundColor:
                 "#ef4444",
@@ -1393,26 +1519,33 @@ const styles =
                 "center",
         },
 
+
         tabBadgeText: {
             color:
                 "#fff",
 
-            fontSize: 10,
+            fontSize: 9,
 
             fontWeight:
                 "800",
         },
 
+
+        /*
+         * LISTA
+         */
+
         content: {
             paddingHorizontal:
-                14,
+                10,
 
             paddingBottom:
-                30,
+                25,
 
             gap:
-                12,
+                9,
         },
+
 
         centered: {
             flex: 1,
@@ -1424,25 +1557,32 @@ const styles =
                 "center",
 
             padding:
-                30,
+                25,
         },
+
 
         loadingText: {
             marginTop:
-                10,
+                8,
 
-            fontSize: 14,
+            fontSize:
+                12,
 
             color:
                 "#64748b",
         },
 
+
+        /*
+         * VACÍO
+         */
+
         emptyIcon: {
-            width: 70,
-            height: 70,
+            width: 60,
+            height: 60,
 
             borderRadius:
-                35,
+                30,
 
             backgroundColor:
                 "#e2e8f0",
@@ -1454,11 +1594,12 @@ const styles =
                 "center",
         },
 
+
         emptyTitle: {
             marginTop:
-                14,
+                12,
 
-            fontSize: 18,
+            fontSize: 16,
 
             fontWeight:
                 "800",
@@ -1467,31 +1608,37 @@ const styles =
                 "#111827",
         },
 
+
         emptyText: {
             marginTop:
-                5,
+                4,
 
             maxWidth:
-                280,
+                260,
 
             textAlign:
                 "center",
 
-            fontSize: 13,
+            fontSize: 12,
 
             lineHeight:
-                19,
+                18,
 
             color:
                 "#64748b",
         },
 
+
+        /*
+         * CARD
+         */
+
         card: {
             padding:
-                15,
+                13,
 
             borderRadius:
-                20,
+                17,
 
             backgroundColor:
                 "#fff",
@@ -1502,6 +1649,7 @@ const styles =
             borderColor:
                 "#e2e8f0",
         },
+
 
         cardHeader: {
             flexDirection:
@@ -1514,11 +1662,12 @@ const styles =
                 "flex-start",
 
             gap:
-                10,
+                8,
         },
 
+
         date: {
-            fontSize: 13,
+            fontSize: 12,
 
             fontWeight:
                 "700",
@@ -1530,11 +1679,14 @@ const styles =
                 "capitalize",
         },
 
+
         hour: {
             marginTop:
-                2,
+                1,
 
-            fontSize: 27,
+            fontSize: 23,
+
+            lineHeight: 27,
 
             fontWeight:
                 "900",
@@ -1542,14 +1694,16 @@ const styles =
             color:
                 "#111827",
         },
+
 
         priceWrap: {
             alignItems:
                 "flex-end",
         },
 
+
         price: {
-            fontSize: 25,
+            fontSize: 22,
 
             fontWeight:
                 "900",
@@ -1558,16 +1712,22 @@ const styles =
                 "#111827",
         },
 
+
         priceLabel: {
-            fontSize: 10,
+            fontSize: 9,
 
             color:
                 "#64748b",
         },
 
+
+        /*
+         * INFO
+         */
+
         infoRow: {
             marginTop:
-                14,
+                11,
 
             flexDirection:
                 "row",
@@ -1576,15 +1736,16 @@ const styles =
                 "center",
 
             gap:
-                10,
+                8,
         },
 
+
         infoIcon: {
-            width: 38,
-            height: 38,
+            width: 34,
+            height: 34,
 
             borderRadius:
-                19,
+                17,
 
             backgroundColor:
                 "#f1f5f9",
@@ -1596,8 +1757,9 @@ const styles =
                 "center",
         },
 
+
         smallLabel: {
-            fontSize: 10,
+            fontSize: 9,
 
             fontWeight:
                 "700",
@@ -1609,14 +1771,15 @@ const styles =
                 "uppercase",
         },
 
+
         infoValue: {
             marginTop:
-                2,
+                1,
 
-            fontSize: 14,
+            fontSize: 13,
 
             lineHeight:
-                19,
+                18,
 
             fontWeight:
                 "700",
@@ -1625,12 +1788,68 @@ const styles =
                 "#111827",
         },
 
+
+        /*
+         * TELÉFONO
+         */
+
+        phoneRow: {
+            marginTop:
+                9,
+
+            flexDirection:
+                "row",
+
+            alignItems:
+                "center",
+
+            gap:
+                8,
+        },
+
+
+        phoneIcon: {
+            width: 34,
+            height: 34,
+
+            borderRadius:
+                17,
+
+            backgroundColor:
+                "#f1f5f9",
+
+            alignItems:
+                "center",
+
+            justifyContent:
+                "center",
+        },
+
+
+        phoneValue: {
+            marginTop:
+                1,
+
+            fontSize: 14,
+
+            fontWeight:
+                "800",
+
+            color:
+                "#111827",
+        },
+
+
+        /*
+         * REFERENCIA
+         */
+
         referenceBox: {
             marginTop:
-                11,
+                9,
 
             paddingTop:
-                10,
+                8,
 
             borderTopWidth:
                 1,
@@ -1645,27 +1864,33 @@ const styles =
                 "center",
 
             gap:
-                7,
+                6,
         },
+
 
         referenceText: {
             flex: 1,
 
-            fontSize: 13,
+            fontSize: 12,
 
             color:
                 "#64748b",
         },
 
+
+        /*
+         * ACEPTAR
+         */
+
         acceptButton: {
             marginTop:
-                14,
+                11,
 
             minHeight:
-                50,
+                44,
 
             borderRadius:
-                15,
+                13,
 
             backgroundColor:
                 "#111827",
@@ -1680,31 +1905,37 @@ const styles =
                 "center",
 
             gap:
-                8,
+                7,
         },
+
 
         acceptButtonText: {
             color:
                 "#fff",
 
-            fontSize: 15,
+            fontSize: 13,
 
             fontWeight:
                 "800",
         },
 
+
+        /*
+         * ASIGNADA
+         */
+
         assignedBox: {
             marginTop:
-                14,
+                11,
 
             minHeight:
-                44,
+                40,
 
             paddingHorizontal:
-                12,
+                10,
 
             borderRadius:
-                13,
+                12,
 
             backgroundColor:
                 "#dcfce7",
@@ -1716,48 +1947,18 @@ const styles =
                 "center",
 
             gap:
-                7,
+                6,
         },
+
 
         assignedText: {
             color:
                 "#166534",
 
-            fontSize: 13,
+            fontSize: 12,
 
             fontWeight:
                 "800",
-        },
-
-        phoneRow: {
-            marginTop: 12,
-
-            flexDirection: "row",
-            alignItems: "center",
-
-            gap: 10,
-        },
-
-        phoneIcon: {
-            width: 38,
-            height: 38,
-
-            borderRadius: 19,
-
-            backgroundColor: "#f1f5f9",
-
-            alignItems: "center",
-            justifyContent: "center",
-        },
-
-        phoneValue: {
-            marginTop: 2,
-
-            fontSize: 15,
-
-            fontWeight: "800",
-
-            color: "#111827",
         },
 
     });

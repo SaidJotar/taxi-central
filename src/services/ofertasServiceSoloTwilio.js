@@ -183,18 +183,28 @@ async function intentarOfertarSolicitudPendienteATaxista(taxistaId) {
     return null;
   }
 
-  const ofertaExistente = await prisma.ofertaSolicitud.findFirst({
-    where: {
-      solicitudViajeId: solicitud.id,
-      taxistaId: taxista.id,
-      estado: {
-        in: ["pendiente", "aceptada", "rechazada", "expirada"],
-      },
-    },
-  });
+  const numeroIntentos =
+    await prisma.ofertaSolicitud.count({
 
-  if (ofertaExistente) {
+      where: {
+
+        solicitudViajeId:
+          solicitud.id,
+
+        taxistaId:
+          taxista.id,
+
+      },
+
+    });
+
+
+  if (
+    numeroIntentos >= 2
+  ) {
+
     return null;
+
   }
 
   const taxistaElegido = await buscarSiguienteTaxistaDisponible(solicitud.id);
@@ -340,129 +350,406 @@ async function emitirOfertaATaxista({ solicitud, taxista }) {
   return oferta;
 }
 
-async function programarSiguienteOferta(solicitudViajeId) {
-  console.log("🔁 programarSiguienteOferta", {
-    solicitudViajeId,
-  });
+async function programarSiguienteOferta(
+  solicitudViajeId
+) {
+
+  console.log(
+    "🔁 programarSiguienteOferta",
+    {
+      solicitudViajeId,
+    }
+  );
+
 
   const solicitud =
     await prisma.solicitudViaje.findUnique({
+
       where: {
-        id: solicitudViajeId,
+        id:
+          solicitudViajeId,
       },
+
       include: {
         ofertas: true,
       },
+
     });
 
+
   if (!solicitud) {
+
     console.log(
-      "⚠️ No existe la solicitud al programar la siguiente oferta:",
+      "⚠️ No existe la solicitud:",
       solicitudViajeId
     );
+
     return null;
+
   }
+
+
+  /*
+   * =====================================================
+   * SOLICITUD YA CERRADA
+   * =====================================================
+   */
 
   if (
     solicitud.estado === "asignada" ||
     solicitud.estado === "cancelada" ||
-    solicitud.estado === "completada"
+    solicitud.estado === "completada" ||
+    solicitud.estado === "sin_taxista"
   ) {
+
     console.log(
-      "⛔ No se relanza oferta: solicitud cerrada",
+      "⛔ Solicitud cerrada:",
       {
         solicitudViajeId,
-        estado: solicitud.estado,
+        estado:
+          solicitud.estado,
       }
     );
 
     return null;
+
   }
 
-  const hayOfertaPendiente = solicitud.ofertas.some(
-    (oferta) => oferta.estado === "pendiente"
-  );
+
+  /*
+   * =====================================================
+   * NO LANZAR DOS OFERTAS SIMULTÁNEAMENTE
+   * =====================================================
+   */
+
+  const hayOfertaPendiente =
+    solicitud.ofertas.some(
+      (oferta) =>
+        oferta.estado ===
+        "pendiente"
+    );
+
 
   if (hayOfertaPendiente) {
+
     console.log(
-      "⏳ Ya existe una oferta pendiente para la solicitud:",
-      solicitudViajeId
+      "⏳ Ya existe una oferta pendiente"
     );
 
     return null;
+
   }
 
-  const taxistasProbados = solicitud.ofertas.map(
-    (oferta) => oferta.taxistaId
-  );
+
+  /*
+   * =====================================================
+   * CONTAR CUÁNTAS VECES SE HA OFRECIDO
+   * A CADA TAXISTA
+   * =====================================================
+   */
+
+  const intentosPorTaxista =
+    new Map();
+
+
+  for (
+    const oferta of
+    solicitud.ofertas
+  ) {
+
+    const actual =
+      intentosPorTaxista.get(
+        oferta.taxistaId
+      ) || 0;
+
+
+    intentosPorTaxista.set(
+      oferta.taxistaId,
+      actual + 1
+    );
+
+  }
+
 
   console.log(
-    "🧪 Taxistas probados:",
-    taxistasProbados
+    "🔢 Intentos por taxista:",
+    Object.fromEntries(
+      intentosPorTaxista
+    )
   );
 
-  const siguienteTaxista =
+
+  /*
+   * =====================================================
+   * PRIMERA VUELTA
+   * =====================================================
+   *
+   * Excluimos a cualquiera que ya haya recibido
+   * esta solicitud alguna vez.
+   *
+   * De esta forma primero pasan TODOS los taxis
+   * disponibles antes de repetir.
+   */
+
+  const probadosPrimeraVuelta =
+    Array.from(
+      intentosPorTaxista.keys()
+    );
+
+
+  let siguienteTaxista =
     await buscarSiguienteTaxistaDisponible(
       solicitudViajeId,
-      taxistasProbados
+      probadosPrimeraVuelta
     );
+
+
+  let vuelta =
+    1;
+
+
+  /*
+   * =====================================================
+   * SEGUNDA VUELTA
+   * =====================================================
+   *
+   * Si ya no queda ningún taxi nuevo,
+   * permitimos volver a los que solamente
+   * han recibido UNA oferta.
+   *
+   * Los que ya tengan 2 intentos quedan
+   * excluidos definitivamente.
+   */
+
+  if (!siguienteTaxista) {
+
+    vuelta =
+      2;
+
+
+    const taxistasConDosIntentos =
+      Array.from(
+        intentosPorTaxista.entries()
+      )
+        .filter(
+          ([, intentos]) =>
+            intentos >= 2
+        )
+        .map(
+          ([taxistaId]) =>
+            taxistaId
+        );
+
+
+    siguienteTaxista =
+      await buscarSiguienteTaxistaDisponible(
+        solicitudViajeId,
+        taxistasConDosIntentos
+      );
+
+  }
+
 
   console.log(
     "🚕 Siguiente taxista:",
-    siguienteTaxista?.id || null
+    siguienteTaxista?.id ||
+    null,
+    "vuelta:",
+    vuelta
   );
 
+
+  /*
+   * =====================================================
+   * HAN TERMINADO LAS DOS VUELTAS
+   * =====================================================
+   */
+
   if (!siguienteTaxista) {
+
     /*
-     * No marcamos inmediatamente sin_taxista.
+     * ===================================================
+     * SOLICITUD DESDE APP CLIENTE
+     * ===================================================
      *
-     * La ruta de Retell seguirá buscando hasta que
-     * transcurran sus 60 segundos. Esto permite que
-     * un taxista se conecte o pase a disponible
-     * durante la llamada.
+     * En la app no seguimos esperando indefinidamente.
+     * Si ya hemos recorrido dos veces los taxis
+     * disponibles, terminamos.
      */
+
+    if (
+      solicitud.origen ===
+      "app_cliente"
+    ) {
+
+      await prisma.solicitudViaje.update({
+
+        where: {
+          id:
+            solicitudViajeId,
+        },
+
+        data: {
+          estado:
+            "sin_taxista",
+        },
+
+      });
+
+
+      console.log(
+        "🚫 Dos vueltas completadas. Sin taxi:",
+        solicitudViajeId
+      );
+
+
+      /*
+       * Si en algún momento tenemos clientes
+       * conectados por Socket.IO también podemos
+       * avisarlos inmediatamente.
+       *
+       * Ride igualmente lo detectará consultando
+       * el estado de la solicitud.
+       */
+
+      try {
+
+        const {
+          obtenerIo,
+        } =
+          require(
+            "../socketSoloTwilio"
+          );
+
+
+        const io =
+          obtenerIo();
+
+
+        io.to(
+          `solicitud:${solicitudViajeId}`
+        ).emit(
+          "solicitud:sin_taxista",
+          {
+            solicitudId:
+              solicitudViajeId,
+
+            estado:
+              "sin_taxista",
+
+            mensaje:
+              "No hay taxis disponibles en este momento.",
+          }
+        );
+
+
+      } catch (error) {
+
+        console.log(
+          "No se pudo emitir solicitud:sin_taxista:",
+          error.message
+        );
+
+      }
+
+
+      return null;
+
+    }
+
+
+    /*
+     * ===================================================
+     * LLAMADA IA
+     * ===================================================
+     *
+     * Conservamos tu comportamiento actual de Retell:
+     * puede esperar hasta su límite de tiempo para que
+     * aparezca un taxi disponible.
+     */
+
     await prisma.solicitudViaje.update({
+
       where: {
-        id: solicitudViajeId,
+        id:
+          solicitudViajeId,
       },
+
       data: {
-        estado: "pendiente",
+        estado:
+          "pendiente",
       },
+
     });
+
 
     const llamadaActiva =
       obtenerLlamadaPorSolicitud(
         solicitudViajeId
       );
 
+
     if (llamadaActiva) {
-      llamadaActiva.estado = "buscando";
-      llamadaActiva.sinTaxi = false;
+
+      llamadaActiva.estado =
+        "buscando";
+
+      llamadaActiva.sinTaxi =
+        false;
+
     }
 
+
     console.log(
-      "⏳ No hay otro taxista ahora; la solicitud continúa pendiente:",
+      "⏳ Sin taxi actualmente. La llamada continúa buscando:",
       solicitudViajeId
     );
 
+
     return null;
+
   }
 
+
+  /*
+   * =====================================================
+   * LANZAR SIGUIENTE OFERTA
+   * =====================================================
+   */
+
   await prisma.solicitudViaje.update({
+
     where: {
-      id: solicitudViajeId,
+      id:
+        solicitudViajeId,
     },
+
     data: {
-      estado: "ofertada",
+      estado:
+        "ofertada",
     },
+
   });
 
-  const oferta = await emitirOfertaATaxista({
-    solicitud,
-    taxista: siguienteTaxista,
-  });
+
+  console.log(
+    `📤 Oferta vuelta ${vuelta} → taxista ${siguienteTaxista.id}`
+  );
+
+
+  const oferta =
+    await emitirOfertaATaxista({
+
+      solicitud,
+
+      taxista:
+        siguienteTaxista,
+
+    });
+
 
   return oferta;
+
 }
 
 function programarTimeoutOferta(ofertaId) {
