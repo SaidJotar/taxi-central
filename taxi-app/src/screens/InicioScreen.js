@@ -256,10 +256,16 @@ export default function InicioScreen() {
   }, [servicioActivo]);
 
   useEffect(() => {
-    if (!socket || !servicioActivo?.solicitudId) {
+
+    if (
+      !socket ||
+      !servicioActivo?.solicitudId ||
+      servicioActivo?.callId
+    ) {
       mensajesInicializadosRef.current = false;
       ultimoMensajeClienteRef.current = null;
       setMensajesNoLeidos(0);
+
       return;
     }
 
@@ -340,6 +346,7 @@ export default function InicioScreen() {
   }, [
     socket,
     servicioActivo?.solicitudId,
+    servicioActivo?.callId,
     mostrarChatServicio,
   ]);
 
@@ -1232,7 +1239,7 @@ export default function InicioScreen() {
               </TouchableOpacity>
             </View>
           )}
-          {servicioActivo && (
+          {servicioActivo && !servicioActivo?.callId && (
             <TouchableOpacity
               style={styles.chatButton}
               onPress={() => {

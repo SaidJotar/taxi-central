@@ -27,9 +27,10 @@ model Taxista {
   enParadaDesde DateTime?
   parada        Parada?   @relation("TaxistasEnParada", fields: [paradaId], references: [id])
 
-  vehiculo     Vehiculo?
-  asignaciones AsignacionSolicitud[]
-  ofertas      OfertaSolicitud[]
+vehiculo     Vehiculo?
+asignaciones AsignacionSolicitud[]
+ofertas      OfertaSolicitud[]
+reservas     ReservaTaxi[]
 
   expoPushToken  String?
   sessionVersion Int       @default(1)
@@ -166,6 +167,68 @@ model MensajeSolicitud {
 
   @@index([solicitudViajeId, creadoEn])
   @@index([emisorTaxistaId])
+}
+
+model ReservaTaxi {
+  id String @id @default(uuid())
+
+  tipo         TipoReserva @default(normal)
+  tipoEspecial TipoReservaEspecial?
+
+  telefonoCliente String
+
+  latRecogida Float?
+  lngRecogida Float?
+
+  direccionRecogida  String
+  direccionBase      String?
+  referenciaRecogida String?
+
+  fechaHora DateTime
+
+  // Reserva normal:
+  // 05:00 - 20:59 = 10 €
+  // 21:00 - 04:59 = 15 €
+  precioFinal Float?
+
+  // Para Tánger, Tetuán, bodas, etc.
+  precioAConvenir Boolean @default(false)
+
+  detallesEspeciales String?
+
+  estado EstadoReserva @default(pendiente)
+
+  taxistaId String?
+  taxista   Taxista? @relation(fields: [taxistaId], references: [id], onDelete: SetNull)
+
+  creadaEn     DateTime  @default(now())
+  aceptadaEn   DateTime?
+  canceladaEn  DateTime?
+  completadaEn DateTime?
+
+  @@index([estado, fechaHora])
+  @@index([taxistaId, estado])
+  @@index([telefonoCliente, fechaHora])
+}
+
+enum TipoReserva {
+  normal
+  especial
+}
+
+enum EstadoReserva {
+  pendiente
+  aceptada
+  cancelada
+  en_servicio
+  completada
+}
+
+enum TipoReservaEspecial {
+  aeropuerto_tanger
+  aeropuerto_tetuan
+  boda_evento
+  otro
 }
 
 enum EstadoObjetoPerdido {
