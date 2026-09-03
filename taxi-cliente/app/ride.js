@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, router } from "expo-router";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, {
+    Marker,
+    Polyline,
+    PROVIDER_GOOGLE,
+} from "react-native-maps";
+
 import {
     View,
     Text,
@@ -26,6 +31,143 @@ function formatDist(metros) {
     if (metros == null) return "—";
     if (metros < 1000) return `${metros} m`;
     return `${(metros / 1000).toFixed(1)} km`;
+}
+
+/*
+ * =====================================================
+ * DECODIFICAR GOOGLE ENCODED POLYLINE
+ * =====================================================
+ *
+ * No necesitamos instalar ningún paquete.
+ */
+
+function decodeGooglePolyline(
+    encoded
+) {
+
+    if (!encoded) {
+        return [];
+    }
+
+
+    const points =
+        [];
+
+
+    let index =
+        0;
+
+    let lat =
+        0;
+
+    let lng =
+        0;
+
+
+    while (
+        index <
+        encoded.length
+    ) {
+
+        let result =
+            0;
+
+        let shift =
+            0;
+
+        let byte;
+
+
+        do {
+
+            byte =
+                encoded
+                    .charCodeAt(
+                        index++
+                    ) -
+                63;
+
+
+            result |=
+                (byte & 0x1f)
+                << shift;
+
+
+            shift +=
+                5;
+
+        } while (
+            byte >=
+            0x20
+        );
+
+
+        const deltaLat =
+            result & 1
+                ? ~(result >> 1)
+                : result >> 1;
+
+
+        lat +=
+            deltaLat;
+
+
+        result =
+            0;
+
+        shift =
+            0;
+
+
+        do {
+
+            byte =
+                encoded
+                    .charCodeAt(
+                        index++
+                    ) -
+                63;
+
+
+            result |=
+                (byte & 0x1f)
+                << shift;
+
+
+            shift +=
+                5;
+
+        } while (
+            byte >=
+            0x20
+        );
+
+
+        const deltaLng =
+            result & 1
+                ? ~(result >> 1)
+                : result >> 1;
+
+
+        lng +=
+            deltaLng;
+
+
+        points.push({
+
+            latitude:
+                lat / 1e5,
+
+            longitude:
+                lng / 1e5,
+
+        });
+
+    }
+
+
+    return points;
+
 }
 
 export default function RideScreen() {
@@ -563,6 +705,20 @@ export default function RideScreen() {
     const etaTexto =
         solicitud?.etaMinutos != null ? `${solicitud.etaMinutos} min` : "—";
 
+
+    const rutaCoords =
+        useMemo(
+            () =>
+                decodeGooglePolyline(
+                    solicitud
+                        ?.rutaPolyline
+                ),
+            [
+                solicitud
+                    ?.rutaPolyline,
+            ]
+        );
+
     return (
         <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
 
@@ -583,6 +739,24 @@ export default function RideScreen() {
                             <Ionicons name="location-sharp" size={34} color="#111827" />
                         </View>
                     </Marker>
+                )}
+
+                {rutaCoords.length > 1 && (
+
+                    <Polyline
+
+                        coordinates={
+                            rutaCoords
+                        }
+
+                        strokeWidth={5}
+
+                        lineCap="round"
+
+                        lineJoin="round"
+
+                    />
+
                 )}
 
                 {taxiCoords && (
