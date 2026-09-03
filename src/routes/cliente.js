@@ -510,19 +510,20 @@ router.get("/estado/:id", async (req, res) => {
 
 
                 /*
-                 * Conservamos la última línea de ruta
-                 * que tuviéramos.
+                 * Al llegar:
+                 *
+                 * - quitamos la línea
+                 * - limpiamos caché
+                 * - no volvemos a usar la última ruta
                  */
 
-                const cacheLlegada =
-                    obtenerCacheRuta(
-                        solicitud.id
-                    );
-
-
                 rutaPolyline =
-                    cacheLlegada?.polyline ||
                     null;
+
+
+                limpiarCacheRuta(
+                    solicitud.id
+                );
 
             }
 

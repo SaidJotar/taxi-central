@@ -882,7 +882,13 @@ export default function RideScreen() {
                     <>
                         <View style={styles.heroRow}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.screenTitle}>Tu taxi viene de camino</Text>
+                                <Text style={styles.screenTitle}>
+                                    {solicitud?.etaEstado === "llegado"
+                                        ? "Tu taxi ya ha llegado"
+                                        : solicitud?.etaEstado === "cerca"
+                                            ? "Tu taxi está a punto de llegar"
+                                            : "Tu taxi viene de camino"}
+                                </Text>
                             </View>
 
                             <View style={styles.etaBadge}>
