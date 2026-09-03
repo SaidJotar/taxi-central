@@ -30,13 +30,50 @@ const {
 const etaRoutesCache =
     new Map();
 
+/*
+ * Guarda el último INTENTO de llamar a Google,
+ * independientemente de si Google responde bien o mal.
+ *
+ * Esto evita el problema de hacer una llamada a Routes
+ * cada vez que ride.js consulta /cliente/estado.
+ */
+const etaRoutesUltimoIntento =
+    new Map();
 
+
+/*
+ * Como máximo una llamada a Google Routes
+ * cada 60 segundos por servicio.
+ */
 const ETA_ROUTES_MIN_INTERVAL_MS =
     60 * 1000;
 
 
+/*
+ * Además de pasar 60 segundos,
+ * el taxi debe haberse desplazado al menos
+ * 100 metros desde la última ruta correcta.
+ */
 const ETA_ROUTES_MOVIMIENTO_MIN_METROS =
     100;
+
+
+/*
+ * A partir de 150 metros dejamos de llamar
+ * completamente a Google.
+ *
+ * Usamos el GPS, que ya tenemos gratis.
+ */
+const ETA_ROUTES_CERCA_METROS =
+    150;
+
+
+/*
+ * A 30 metros o menos consideramos que
+ * el taxi ya está en el punto de recogida.
+ */
+const ETA_ROUTES_LLEGADA_METROS =
+    30;
 
 
 function obtenerCacheRuta(
@@ -68,6 +105,21 @@ function guardarCacheRuta(
                 Date.now(),
 
         }
+    );
+
+}
+
+
+function limpiarCacheRuta(
+    solicitudId
+) {
+
+    etaRoutesCache.delete(
+        solicitudId
+    );
+
+    etaRoutesUltimoIntento.delete(
+        solicitudId
     );
 
 }
@@ -324,310 +376,530 @@ router.get("/estado/:id", async (req, res) => {
                 valoracion?._count?.ratingCliente || 0;
         }
 
+
         let distanciaTaxiMetros =
-    null;
+            null;
 
-let etaMinutos =
-    null;
+        let etaMinutos =
+            null;
 
-let etaFuente =
-    null;
+        let etaFuente =
+            null;
 
-let rutaPolyline =
-    null;
+        let etaTexto =
+            null;
 
+        let etaEstado =
+            null;
 
-if (
-    taxista &&
-    solicitud.latRecogida != null &&
-    solicitud.lngRecogida != null &&
-    taxista.lat != null &&
-    taxista.lng != null
-) {
-
-    /*
-     * =================================================
-     * DATOS ACTUALES
-     * =================================================
-     */
-
-    const taxiLat =
-        Number(
-            taxista.lat
-        );
-
-    const taxiLng =
-        Number(
-            taxista.lng
-        );
-
-
-    const clienteLat =
-        Number(
-            solicitud.latRecogida
-        );
-
-    const clienteLng =
-        Number(
-            solicitud.lngRecogida
-        );
-
-
-    /*
-     * =================================================
-     * CACHE
-     * =================================================
-     */
-
-    const cache =
-        obtenerCacheRuta(
-            solicitud.id
-        );
-
-
-    let usarGoogle =
-        false;
-
-
-    if (!cache) {
-
-        /*
-         * Primera vez:
-         * calculamos inmediatamente.
-         */
-        usarGoogle =
-            true;
-
-    } else {
-
-        const tiempoDesdeUltimaRuta =
-            Date.now() -
-            cache.calculadoEn;
-
-
-        const movimientoDesdeUltimaRuta =
-            distanciaMetros(
-                cache.taxiLat,
-                cache.taxiLng,
-                taxiLat,
-                taxiLng
-            );
+        let rutaPolyline =
+            null;
 
 
         /*
-         * Solo consultamos Google si:
-         *
-         * 1. han pasado 90 segundos
-         * 2. el coche avanzó ≥ 100 metros
+         * =====================================================
+         * LIMPIAR CACHE SI EL SERVICIO HA TERMINADO
+         * =====================================================
          */
+
         if (
-            tiempoDesdeUltimaRuta >=
-                ETA_ROUTES_MIN_INTERVAL_MS &&
-            movimientoDesdeUltimaRuta >=
-                ETA_ROUTES_MOVIMIENTO_MIN_METROS
+            solicitud.estado === "cancelada" ||
+            solicitud.estado === "sin_taxista" ||
+            solicitud.estado === "completada"
         ) {
 
-            usarGoogle =
-                true;
-
-        }
-
-    }
-
-
-    /*
-     * =================================================
-     * GOOGLE ROUTES
-     * =================================================
-     */
-
-    if (usarGoogle) {
-
-        try {
-
-            const ruta =
-                await calcularRutaTaxiCliente({
-
-                    origenLat:
-                        taxiLat,
-
-                    origenLng:
-                        taxiLng,
-
-                    destinoLat:
-                        clienteLat,
-
-                    destinoLng:
-                        clienteLng,
-
-                });
-
-
-            guardarCacheRuta(
-                solicitud.id,
-                {
-
-                    taxiLat,
-
-                    taxiLng,
-
-
-                    distanciaMetros:
-                        ruta.distanciaMetros,
-
-
-                    etaMinutos:
-                        ruta.etaMinutos,
-
-
-                    polyline:
-                        ruta.polyline,
-
-
-                    fuente:
-                        ruta.fuente,
-
-                }
-            );
-
-
-            distanciaTaxiMetros =
-                ruta.distanciaMetros;
-
-
-            etaMinutos =
-                ruta.etaMinutos;
-
-
-            etaFuente =
-                ruta.fuente;
-
-
-            rutaPolyline =
-                ruta.polyline;
-
-
-            console.log(
-                "🛣️ ETA Google Routes:",
-                {
-                    solicitudId:
-                        solicitud.id,
-
-                    distanciaMetros:
-                        distanciaTaxiMetros,
-
-                    etaMinutos,
-
-                }
-            );
-
-
-        } catch (error) {
-
-            console.log(
-                "⚠️ Google Routes no disponible:",
-                error.message
-            );
-
-        }
-
-    }
-
-
-    /*
-     * =================================================
-     * CACHE EXISTENTE
-     * =================================================
-     */
-
-    if (
-        etaMinutos == null
-    ) {
-
-        const cacheActual =
-            obtenerCacheRuta(
+            limpiarCacheRuta(
                 solicitud.id
             );
 
-
-        if (cacheActual) {
-
-            distanciaTaxiMetros =
-                cacheActual
-                    .distanciaMetros;
+        }
 
 
-            etaMinutos =
-                cacheActual
-                    .etaMinutos;
+        /*
+         * =====================================================
+         * CALCULAR ETA
+         * =====================================================
+         */
+
+        if (
+            taxista &&
+            solicitud.latRecogida != null &&
+            solicitud.lngRecogida != null &&
+            taxista.lat != null &&
+            taxista.lng != null
+        ) {
+
+            const taxiLat =
+                Number(
+                    taxista.lat
+                );
 
 
-            etaFuente =
-                cacheActual
-                    .fuente;
+            const taxiLng =
+                Number(
+                    taxista.lng
+                );
 
 
-            rutaPolyline =
-                cacheActual
-                    .polyline;
+            const clienteLat =
+                Number(
+                    solicitud.latRecogida
+                );
+
+
+            const clienteLng =
+                Number(
+                    solicitud.lngRecogida
+                );
+
+
+            /*
+             * =================================================
+             * DISTANCIA GPS ACTUAL
+             * =================================================
+             *
+             * Esto NO llama a Google.
+             *
+             * Se calcula localmente con geoUtils.
+             */
+
+            const distanciaDirectaActual =
+                distanciaMetros(
+                    taxiLat,
+                    taxiLng,
+                    clienteLat,
+                    clienteLng
+                );
+
+
+            /*
+             * =================================================
+             * TAXI YA EN EL PUNTO
+             * =================================================
+             *
+             * 30 metros o menos.
+             *
+             * NO Google Routes.
+             */
+
+            if (
+                distanciaDirectaActual <=
+                ETA_ROUTES_LLEGADA_METROS
+            ) {
+
+                distanciaTaxiMetros =
+                    Math.round(
+                        distanciaDirectaActual
+                    );
+
+
+                etaMinutos =
+                    0;
+
+
+                etaFuente =
+                    "gps_llegada";
+
+
+                etaEstado =
+                    "llegado";
+
+
+                etaTexto =
+                    "Ya ha llegado";
+
+
+                /*
+                 * Conservamos la última línea de ruta
+                 * que tuviéramos.
+                 */
+
+                const cacheLlegada =
+                    obtenerCacheRuta(
+                        solicitud.id
+                    );
+
+
+                rutaPolyline =
+                    cacheLlegada?.polyline ||
+                    null;
+
+            }
+
+
+            /*
+             * =================================================
+             * TAXI MUY CERCA
+             * =================================================
+             *
+             * Entre 30 y 150 metros.
+             *
+             * Ya NO hacemos más llamadas a Google.
+             */
+
+            else if (
+                distanciaDirectaActual <=
+                ETA_ROUTES_CERCA_METROS
+            ) {
+
+                distanciaTaxiMetros =
+                    Math.round(
+                        distanciaDirectaActual
+                    );
+
+
+                etaMinutos =
+                    1;
+
+
+                etaFuente =
+                    "gps_cercano";
+
+
+                etaEstado =
+                    "cerca";
+
+
+                etaTexto =
+                    "<1 min";
+
+
+                const cacheCercano =
+                    obtenerCacheRuta(
+                        solicitud.id
+                    );
+
+
+                rutaPolyline =
+                    cacheCercano?.polyline ||
+                    null;
+
+            }
+
+
+            /*
+             * =================================================
+             * TAXI A MÁS DE 150 METROS
+             * =================================================
+             */
+
+            else {
+
+                const ahora =
+                    Date.now();
+
+
+                const cache =
+                    obtenerCacheRuta(
+                        solicitud.id
+                    );
+
+
+                const ultimoIntento =
+                    etaRoutesUltimoIntento.get(
+                        solicitud.id
+                    ) || 0;
+
+
+                /*
+                 * Aunque Google haya FALLADO,
+                 * no permitimos otro intento hasta
+                 * que pasen 60 segundos.
+                 */
+
+                const puedeIntentarPorTiempo =
+                    ahora -
+                    ultimoIntento >=
+                    ETA_ROUTES_MIN_INTERVAL_MS;
+
+
+                let usarGoogle =
+                    false;
+
+
+                /*
+                 * =================================================
+                 * PRIMER CÁLCULO
+                 * =================================================
+                 */
+
+                if (!cache) {
+
+                    usarGoogle =
+                        puedeIntentarPorTiempo;
+
+                } else {
+
+                    /*
+                     * Cuánto se ha movido el taxi desde
+                     * la última ruta Google correcta.
+                     */
+
+                    const movimientoDesdeUltimaRuta =
+                        distanciaMetros(
+                            cache.taxiLat,
+                            cache.taxiLng,
+                            taxiLat,
+                            taxiLng
+                        );
+
+
+                    /*
+                     * Para llamar otra vez a Google tienen
+                     * que cumplirse LAS DOS:
+                     *
+                     * - han pasado 60 segundos
+                     * - se ha movido >= 100 metros
+                     */
+
+                    usarGoogle =
+                        puedeIntentarPorTiempo &&
+                        movimientoDesdeUltimaRuta >=
+                        ETA_ROUTES_MOVIMIENTO_MIN_METROS;
+
+                }
+
+
+                /*
+                 * =================================================
+                 * GOOGLE ROUTES
+                 * =================================================
+                 */
+
+                if (usarGoogle) {
+
+                    /*
+                     * MUY IMPORTANTE:
+                     *
+                     * Guardamos el intento ANTES de llamar.
+                     *
+                     * Así, aunque Google falle,
+                     * no volveremos a llamarlo dentro de
+                     * 4 segundos cuando ride.js haga polling.
+                     */
+
+                    etaRoutesUltimoIntento.set(
+                        solicitud.id,
+                        ahora
+                    );
+
+
+                    try {
+
+                        const ruta =
+                            await calcularRutaTaxiCliente({
+
+                                origenLat:
+                                    taxiLat,
+
+                                origenLng:
+                                    taxiLng,
+
+                                destinoLat:
+                                    clienteLat,
+
+                                destinoLng:
+                                    clienteLng,
+
+                            });
+
+
+                        /*
+                         * Solo guardamos como ruta válida
+                         * si Google respondió correctamente.
+                         */
+
+                        guardarCacheRuta(
+                            solicitud.id,
+                            {
+
+                                taxiLat,
+
+                                taxiLng,
+
+                                distanciaMetros:
+                                    ruta.distanciaMetros,
+
+                                etaMinutos:
+                                    ruta.etaMinutos,
+
+                                polyline:
+                                    ruta.polyline,
+
+                                fuente:
+                                    ruta.fuente,
+
+                            }
+                        );
+
+
+                        distanciaTaxiMetros =
+                            ruta.distanciaMetros;
+
+
+                        etaMinutos =
+                            ruta.etaMinutos;
+
+
+                        etaFuente =
+                            ruta.fuente;
+
+
+                        etaEstado =
+                            "en_camino";
+
+
+                        etaTexto =
+                            `${ruta.etaMinutos} min`;
+
+
+                        rutaPolyline =
+                            ruta.polyline;
+
+
+                        console.log(
+                            "🛣️ ETA Google Routes:",
+                            {
+                                solicitudId:
+                                    solicitud.id,
+
+                                distanciaMetros:
+                                    distanciaTaxiMetros,
+
+                                etaMinutos,
+                            }
+                        );
+
+
+                    } catch (error) {
+
+                        /*
+                         * Aunque falle, el último intento
+                         * YA está guardado.
+                         *
+                         * Por tanto NO volverá a Google
+                         * durante al menos 60 segundos.
+                         */
+
+                        console.log(
+                            "⚠️ Google Routes no disponible. Próximo intento mínimo en 60 s:",
+                            error.message
+                        );
+
+                    }
+
+                }
+
+
+                /*
+                 * =================================================
+                 * USAR CACHE
+                 * =================================================
+                 *
+                 * Si no hemos consultado Google ahora,
+                 * o Google ha fallado, usamos la última
+                 * ruta válida.
+                 */
+
+                if (
+                    etaMinutos == null
+                ) {
+
+                    const cacheActual =
+                        obtenerCacheRuta(
+                            solicitud.id
+                        );
+
+
+                    if (cacheActual) {
+
+                        distanciaTaxiMetros =
+                            cacheActual
+                                .distanciaMetros;
+
+
+                        etaMinutos =
+                            cacheActual
+                                .etaMinutos;
+
+
+                        etaFuente =
+                            cacheActual
+                                .fuente;
+
+
+                        etaEstado =
+                            "en_camino";
+
+
+                        etaTexto =
+                            `${cacheActual.etaMinutos} min`;
+
+
+                        rutaPolyline =
+                            cacheActual
+                                .polyline;
+
+                    }
+
+                }
+
+
+                /*
+                 * =================================================
+                 * FALLBACK LOCAL
+                 * =================================================
+                 *
+                 * Si todavía no tenemos ninguna ruta
+                 * válida de Google:
+                 *
+                 * usamos distancia GPS.
+                 *
+                 * CERO llamadas Google.
+                 */
+
+                if (
+                    etaMinutos == null
+                ) {
+
+                    distanciaTaxiMetros =
+                        Math.round(
+                            distanciaDirectaActual
+                        );
+
+
+                    etaMinutos =
+                        Math.max(
+                            1,
+                            Math.ceil(
+                                distanciaTaxiMetros /
+                                350
+                            )
+                        );
+
+
+                    etaFuente =
+                        "aproximado_local";
+
+
+                    etaEstado =
+                        "en_camino";
+
+
+                    etaTexto =
+                        `${etaMinutos} min`;
+
+
+                    rutaPolyline =
+                        null;
+
+                }
+
+            }
 
         }
 
-    }
 
-
-    /*
-     * =================================================
-     * FALLBACK TOTALMENTE LOCAL
-     * =================================================
-     *
-     * Si:
-     *
-     * - Routes está caído
-     * - la cuota se agotó
-     * - la key falla
-     *
-     * seguimos usando exactamente
-     * tu sistema anterior.
-     */
-
-    if (
-        etaMinutos == null
-    ) {
-
-        distanciaTaxiMetros =
-            Math.round(
-                distanciaMetros(
-                    clienteLat,
-                    clienteLng,
-                    taxiLat,
-                    taxiLng
-                )
-            );
-
-
-        etaMinutos =
-            Math.max(
-                1,
-                Math.ceil(
-                    distanciaTaxiMetros /
-                    350
-                )
-            );
-
-
-        etaFuente =
-            "aproximado_local";
-
-
-        rutaPolyline =
-            null;
-
-    }
-
-}
-
-       
         return res.json({
             ok: true,
             solicitud: {
@@ -643,6 +915,8 @@ if (
                 etaMinutos,
                 distanciaTaxiMetros,
                 etaFuente,
+                etaTexto,
+                etaEstado,
                 rutaPolyline: rutaPolyline || null,
                 taxista: taxista
                     ? {

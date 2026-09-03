@@ -785,7 +785,12 @@ export default function RideScreen() {
     }
 
     const etaTexto =
-        solicitud?.etaMinutos != null ? `${solicitud.etaMinutos} min` : "—";
+        solicitud?.etaTexto ||
+        (
+            solicitud?.etaMinutos != null
+                ? `${solicitud.etaMinutos} min`
+                : "—"
+        );
 
     return (
         <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
