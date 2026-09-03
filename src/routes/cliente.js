@@ -12,6 +12,11 @@ const fetch = (...args) =>
 
 const router = express.Router();
 
+const {
+    calcularPrecioReserva,
+    validarAntelacionReserva,
+} = require("../services/reservasService");
+
 router.post("/solicitar", async (req, res) => {
     try {
         const {
@@ -404,5 +409,640 @@ router.post("/valorar/:solicitudId", async (req, res) => {
         });
     }
 });
+
+/*
+|--------------------------------------------------------------------------
+| RESERVAS TAXI - CALCULAR PRECIO
+|--------------------------------------------------------------------------
+*/
+
+router.post(
+    "/reservas/calcular",
+    async (req, res) => {
+        try {
+            const {
+                fechaHora,
+                tipo = "normal",
+            } = req.body || {};
+
+            if (!fechaHora) {
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "Debes indicar la fecha y hora de la reserva.",
+                });
+            }
+
+            /*
+             * Las especiales no tienen
+             * precio automático.
+             */
+            if (tipo === "especial") {
+                validarAntelacionReserva(
+                    fechaHora
+                );
+
+                return res.json({
+                    ok: true,
+                    tipo: "especial",
+                    precioFinal: null,
+                    precioAConvenir: true,
+                    mensaje:
+                        "El precio de esta reserva se acordará previamente.",
+                });
+            }
+
+            const resultado =
+                calcularPrecioReserva(
+                    fechaHora
+                );
+
+            return res.json({
+                ok: true,
+
+                tipo: "normal",
+
+                precioFinal:
+                    resultado.precioFinal,
+
+                tipoTarifa:
+                    resultado.tipoTarifa,
+
+                precioAConvenir:
+                    false,
+
+                incluyeEquipaje:
+                    true,
+
+                incluyeEspera:
+                    true,
+
+                mensaje:
+                    `Precio final: ${resultado.precioFinal} €. Equipaje y tiempo de espera incluidos.`,
+            });
+
+        } catch (error) {
+            return res.status(400).json({
+                ok: false,
+                error:
+                    error.message ||
+                    "No se pudo calcular la reserva.",
+            });
+        }
+    }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| RESERVAS TAXI - CREAR
+|--------------------------------------------------------------------------
+*/
+
+router.post(
+    "/reservas",
+    async (req, res) => {
+        try {
+            const {
+                tipo = "normal",
+                tipoEspecial = null,
+
+                telefonoCliente,
+
+                lat,
+                lng,
+
+                direccionRecogida,
+                direccionBase = null,
+                referenciaRecogida = null,
+
+                fechaHora,
+
+                detallesEspeciales = null,
+            } = req.body || {};
+
+
+            if (
+                !telefonoCliente ||
+                !String(
+                    telefonoCliente
+                ).trim()
+            ) {
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "El teléfono del cliente es obligatorio.",
+                });
+            }
+
+
+            if (!fechaHora) {
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "Debes indicar fecha y hora.",
+                });
+            }
+
+
+            if (
+                !direccionRecogida ||
+                !String(
+                    direccionRecogida
+                ).trim()
+            ) {
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "La dirección de recogida es obligatoria.",
+                });
+            }
+
+
+            /*
+             * =====================================================
+             * RESERVA NORMAL
+             * =====================================================
+             */
+            if (tipo === "normal") {
+
+                if (
+                    typeof lat !== "number" ||
+                    typeof lng !== "number"
+                ) {
+                    return res.status(400).json({
+                        ok: false,
+                        error:
+                            "La ubicación de recogida es obligatoria.",
+                    });
+                }
+
+
+                /*
+                 * El backend vuelve a calcular
+                 * el precio.
+                 *
+                 * Nunca confiamos en un precio
+                 * enviado desde la app.
+                 */
+                const calculo =
+                    calcularPrecioReserva(
+                        fechaHora
+                    );
+
+
+                const reserva =
+                    await prisma.reservaTaxi.create({
+                        data: {
+                            tipo:
+                                "normal",
+
+                            telefonoCliente:
+                                String(
+                                    telefonoCliente
+                                ).trim(),
+
+                            latRecogida:
+                                lat,
+
+                            lngRecogida:
+                                lng,
+
+                            direccionRecogida:
+                                String(
+                                    direccionRecogida
+                                ).trim(),
+
+                            direccionBase:
+                                direccionBase
+                                    ? String(
+                                        direccionBase
+                                    ).trim()
+                                    : null,
+
+                            referenciaRecogida:
+                                referenciaRecogida
+                                    ? String(
+                                        referenciaRecogida
+                                    ).trim()
+                                    : null,
+
+                            fechaHora:
+                                calculo.fechaHora,
+
+                            precioFinal:
+                                calculo.precioFinal,
+
+                            precioAConvenir:
+                                false,
+
+                            estado:
+                                "pendiente",
+                        },
+                    });
+
+
+                /*
+                 * Avisamos en tiempo real
+                 * a las apps taxistas.
+                 *
+                 * La BD sigue siendo la
+                 * fuente de verdad.
+                 */
+                try {
+                    const {
+                        obtenerIo,
+                    } =
+                        require("../socketSoloTwilio");
+
+                    const io =
+                        obtenerIo();
+
+                    io.emit(
+                        "reserva:nueva",
+                        {
+                            reservaId:
+                                reserva.id,
+
+                            fechaHora:
+                                reserva.fechaHora,
+
+                            precioFinal:
+                                reserva.precioFinal,
+                        }
+                    );
+
+                } catch (socketError) {
+                    console.log(
+                        "Aviso reserva:nueva no enviado:",
+                        socketError.message
+                    );
+                }
+
+
+                return res.status(201).json({
+                    ok: true,
+
+                    reserva: {
+                        id:
+                            reserva.id,
+
+                        tipo:
+                            reserva.tipo,
+
+                        estado:
+                            reserva.estado,
+
+                        telefonoCliente:
+                            reserva.telefonoCliente,
+
+                        fechaHora:
+                            reserva.fechaHora,
+
+                        direccionRecogida:
+                            reserva.direccionRecogida,
+
+                        direccionBase:
+                            reserva.direccionBase,
+
+                        referenciaRecogida:
+                            reserva.referenciaRecogida,
+
+                        latRecogida:
+                            reserva.latRecogida,
+
+                        lngRecogida:
+                            reserva.lngRecogida,
+
+                        precioFinal:
+                            reserva.precioFinal,
+
+                        precioAConvenir:
+                            reserva.precioAConvenir,
+                    },
+                });
+            }
+
+
+            /*
+             * =====================================================
+             * RESERVA ESPECIAL
+             * =====================================================
+             */
+
+            if (tipo === "especial") {
+
+                validarAntelacionReserva(
+                    fechaHora
+                );
+
+
+                const tiposPermitidos = [
+                    "aeropuerto_tanger",
+                    "aeropuerto_tetuan",
+                    "boda_evento",
+                    "otro",
+                ];
+
+
+                if (
+                    !tiposPermitidos.includes(
+                        tipoEspecial
+                    )
+                ) {
+                    return res.status(400).json({
+                        ok: false,
+                        error:
+                            "Tipo de reserva especial no válido.",
+                    });
+                }
+
+
+                const reserva =
+                    await prisma.reservaTaxi.create({
+                        data: {
+                            tipo:
+                                "especial",
+
+                            tipoEspecial,
+
+                            telefonoCliente:
+                                String(
+                                    telefonoCliente
+                                ).trim(),
+
+                            latRecogida:
+                                typeof lat === "number"
+                                    ? lat
+                                    : null,
+
+                            lngRecogida:
+                                typeof lng === "number"
+                                    ? lng
+                                    : null,
+
+                            direccionRecogida:
+                                String(
+                                    direccionRecogida
+                                ).trim(),
+
+                            direccionBase:
+                                direccionBase
+                                    ? String(
+                                        direccionBase
+                                    ).trim()
+                                    : null,
+
+                            referenciaRecogida:
+                                referenciaRecogida
+                                    ? String(
+                                        referenciaRecogida
+                                    ).trim()
+                                    : null,
+
+                            fechaHora:
+                                new Date(
+                                    fechaHora
+                                ),
+
+                            precioFinal:
+                                null,
+
+                            precioAConvenir:
+                                true,
+
+                            detallesEspeciales:
+                                detallesEspeciales
+                                    ? String(
+                                        detallesEspeciales
+                                    ).trim()
+                                    : null,
+
+                            estado:
+                                "pendiente",
+                        },
+                    });
+
+
+                return res.status(201).json({
+                    ok: true,
+                    reserva,
+                    mensaje:
+                        "Solicitud especial registrada. El precio está pendiente de acordar.",
+                });
+            }
+
+
+            return res.status(400).json({
+                ok: false,
+                error:
+                    "Tipo de reserva no válido.",
+            });
+
+        } catch (error) {
+            console.error(
+                "Error POST /cliente/reservas:",
+                error
+            );
+
+            return res.status(400).json({
+                ok: false,
+                error:
+                    error.message ||
+                    "No se pudo crear la reserva.",
+            });
+        }
+    }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| RESERVAS TAXI - RESERVAS DEL CLIENTE
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    "/reservas",
+    async (req, res) => {
+        try {
+            const telefono =
+                String(
+                    req.query.telefono ||
+                    ""
+                ).trim();
+
+
+            if (!telefono) {
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "Debes indicar el teléfono.",
+                });
+            }
+
+
+            const reservas =
+                await prisma.reservaTaxi.findMany({
+                    where: {
+                        telefonoCliente:
+                            telefono,
+                    },
+
+                    include: {
+                        taxista: {
+                            include: {
+                                vehiculo: true,
+                            },
+                        },
+                    },
+
+                    orderBy: {
+                        fechaHora:
+                            "asc",
+                    },
+                });
+
+
+            return res.json({
+                ok: true,
+                reservas,
+            });
+
+        } catch (error) {
+            console.error(
+                "Error GET /cliente/reservas:",
+                error
+            );
+
+            return res.status(500).json({
+                ok: false,
+                error:
+                    "No se pudieron consultar las reservas.",
+            });
+        }
+    }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| RESERVAS TAXI - CANCELAR
+|--------------------------------------------------------------------------
+*/
+
+router.post(
+    "/reservas/:id/cancelar",
+    async (req, res) => {
+        try {
+            const {
+                id,
+            } = req.params;
+
+
+            const reserva =
+                await prisma.reservaTaxi.findUnique({
+                    where: {
+                        id,
+                    },
+                });
+
+
+            if (!reserva) {
+                return res.status(404).json({
+                    ok: false,
+                    error:
+                        "Reserva no encontrada.",
+                });
+            }
+
+
+            if (
+                reserva.estado ===
+                    "cancelada" ||
+                reserva.estado ===
+                    "completada" ||
+                reserva.estado ===
+                    "en_servicio"
+            ) {
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "Esta reserva ya no se puede cancelar.",
+                });
+            }
+
+
+            const actualizada =
+                await prisma.reservaTaxi.update({
+                    where: {
+                        id,
+                    },
+
+                    data: {
+                        estado:
+                            "cancelada",
+
+                        canceladaEn:
+                            new Date(),
+                    },
+                });
+
+
+            /*
+             * Si ya la había aceptado
+             * un taxista, le avisamos.
+             */
+            if (
+                reserva.taxistaId
+            ) {
+                try {
+                    const {
+                        obtenerIo,
+                    } =
+                        require("../socketSoloTwilio");
+
+                    const io =
+                        obtenerIo();
+
+                    io.to(
+                        `taxista:${reserva.taxistaId}`
+                    ).emit(
+                        "reserva:cancelada",
+                        {
+                            reservaId:
+                                reserva.id,
+                        }
+                    );
+
+                } catch (socketError) {
+                    console.log(
+                        "No se pudo emitir reserva:cancelada:",
+                        socketError.message
+                    );
+                }
+            }
+
+
+            return res.json({
+                ok: true,
+                reserva:
+                    actualizada,
+            });
+
+        } catch (error) {
+            console.error(
+                "Error cancelar reserva:",
+                error
+            );
+
+            return res.status(500).json({
+                ok: false,
+                error:
+                    "No se pudo cancelar la reserva.",
+            });
+        }
+    }
+);
 
 module.exports = router;
