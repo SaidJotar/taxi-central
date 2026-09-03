@@ -308,28 +308,110 @@ export default function RideScreen() {
     }, [cargarEstado, detenerPolling, solicitud?.estado, solicitudId]);
 
     const pickupCoords = useMemo(() => {
-        const lat = Number(solicitud?.latRecogida);
-        const lng = Number(solicitud?.lngRecogida);
 
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        const lat =
+            Number(
+                solicitud?.latRecogida
+            );
+
+        const lng =
+            Number(
+                solicitud?.lngRecogida
+            );
+
+
+        if (
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
+        ) {
+
+            return null;
+
+        }
+
 
         return {
-            latitude: lat,
-            longitude: lng,
+
+            latitude:
+                lat,
+
+            longitude:
+                lng,
+
         };
-    }, [solicitud]);
+
+    }, [
+        solicitud?.latRecogida,
+        solicitud?.lngRecogida,
+    ]);
+
 
     const taxiCoords = useMemo(() => {
-        const lat = Number(solicitud?.taxista?.lat);
-        const lng = Number(solicitud?.taxista?.lng);
 
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        const lat =
+            Number(
+                solicitud?.taxista?.lat
+            );
+
+        const lng =
+            Number(
+                solicitud?.taxista?.lng
+            );
+
+
+        if (
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
+        ) {
+
+            return null;
+
+        }
+
 
         return {
-            latitude: lat,
-            longitude: lng,
+
+            latitude:
+                lat,
+
+            longitude:
+                lng,
+
         };
-    }, [solicitud]);
+
+    }, [
+        solicitud?.taxista?.lat,
+        solicitud?.taxista?.lng,
+    ]);
+
+
+    /*
+     * =====================================================
+     * RUTA GOOGLE
+     * =====================================================
+     *
+     * IMPORTANTE:
+     *
+     * Este hook tiene que estar SIEMPRE
+     * antes de cualquier:
+     *
+     * if (loading) return ...
+     * if (!solicitud) return ...
+     */
+
+    const rutaCoords =
+        useMemo(
+            () => {
+
+                return decodeGooglePolyline(
+                    solicitud?.rutaPolyline
+                );
+
+            },
+            [
+                solicitud?.rutaPolyline,
+            ]
+        );
 
     useEffect(() => {
         if (!solicitud?.id) return;
@@ -704,20 +786,6 @@ export default function RideScreen() {
 
     const etaTexto =
         solicitud?.etaMinutos != null ? `${solicitud.etaMinutos} min` : "—";
-
-
-    const rutaCoords =
-        useMemo(
-            () =>
-                decodeGooglePolyline(
-                    solicitud
-                        ?.rutaPolyline
-                ),
-            [
-                solicitud
-                    ?.rutaPolyline,
-            ]
-        );
 
     return (
         <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>

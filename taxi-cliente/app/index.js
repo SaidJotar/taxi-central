@@ -170,6 +170,11 @@ export default function HomeScreen() {
     setAccionTrasTelefono,
   ] = useState(null);
 
+  const [
+    taxistasDisponiblesMapa,
+    setTaxistasDisponiblesMapa,
+  ] = useState([]);
+
   /*
    * TECLADO
    */
@@ -1755,6 +1760,69 @@ export default function HomeScreen() {
   }
 
 
+  const cargarTaxistasDisponibles =
+    useCallback(async () => {
+
+      try {
+
+        const res =
+          await api
+            .getTaxistasDisponibles();
+
+
+        const taxistas =
+          Array.isArray(
+            res?.taxistas
+          )
+            ? res.taxistas
+            : [];
+
+
+        setTaxistasDisponiblesMapa(
+          taxistas
+        );
+
+
+      } catch (error) {
+
+        console.log(
+          "Error cargando taxis disponibles:",
+          error.message
+        );
+
+
+        setTaxistasDisponiblesMapa(
+          []
+        );
+
+      }
+
+    }, []);
+
+  useEffect(() => {
+
+    cargarTaxistasDisponibles();
+
+
+    const interval =
+      setInterval(
+        cargarTaxistasDisponibles,
+        15000
+      );
+
+
+    return () => {
+
+      clearInterval(
+        interval
+      );
+
+    };
+
+  }, [
+    cargarTaxistasDisponibles,
+  ]);
+
   /*
    * =====================================================
    * CARGANDO UBICACIÓN
@@ -1855,6 +1923,80 @@ export default function HomeScreen() {
           }
 
         >
+
+          {!requestingTaxi &&
+            taxistasDisponiblesMapa.map(
+              (taxista) => {
+
+                const latitude =
+                  Number(
+                    taxista.lat
+                  );
+
+                const longitude =
+                  Number(
+                    taxista.lng
+                  );
+
+
+                if (
+                  !Number.isFinite(
+                    latitude
+                  ) ||
+                  !Number.isFinite(
+                    longitude
+                  )
+                ) {
+
+                  return null;
+
+                }
+
+
+                return (
+
+                  <Marker
+
+                    key={
+                      `taxi-disponible-${taxista.id}`
+                    }
+
+                    coordinate={{
+                      latitude,
+                      longitude,
+                    }}
+
+                    anchor={{
+                      x: 0.5,
+                      y: 0.5,
+                    }}
+
+                    tracksViewChanges={
+                      false
+                    }
+
+                  >
+
+                    <View
+                      style={
+                        styles.availableTaxiMarker
+                      }
+                    >
+
+                      <Ionicons
+                        name="car"
+                        size={17}
+                        color="#ffffff"
+                      />
+
+                    </View>
+
+                  </Marker>
+
+                );
+
+              }
+            )}
 
           {pickup && (
 
@@ -3455,5 +3597,46 @@ const styles = StyleSheet.create({
     color: "#64748b",
 
     fontWeight: "600",
+  },
+  availableTaxiMarker: {
+
+    width: 34,
+
+    height: 34,
+
+    borderRadius: 17,
+
+    backgroundColor:
+      "#111827",
+
+    alignItems:
+      "center",
+
+    justifyContent:
+      "center",
+
+    borderWidth:
+      2,
+
+    borderColor:
+      "#ffffff",
+
+    shadowColor:
+      "#000",
+
+    shadowOpacity:
+      0.15,
+
+    shadowRadius:
+      5,
+
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation:
+      4,
+
   },
 });

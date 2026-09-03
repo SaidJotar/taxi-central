@@ -172,4 +172,12 @@ export const api = {
                 method: "GET",
             }
         ),
+
+    getTaxistasDisponibles: () =>
+        request(
+            "/cliente/taxistas-disponibles",
+            {
+                method: "GET",
+            }
+        ),
 };

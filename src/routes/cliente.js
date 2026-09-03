@@ -2313,4 +2313,134 @@ function formatearFechaReservaParaPush(
 
 }
 
+/*
+|--------------------------------------------------------------------------
+| TAXIS DISPONIBLES PARA MAPA CLIENTE
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    "/taxistas-disponibles",
+    async (req, res) => {
+
+        try {
+
+            /*
+             * Solo consideramos GPS reciente.
+             * 2 minutos.
+             */
+            const limiteGps =
+                new Date(
+                    Date.now() -
+                    2 * 60 * 1000
+                );
+
+
+            const taxistas =
+                await prisma.taxista.findMany({
+
+                    where: {
+
+                        estado:
+                            "disponible",
+
+                        lat: {
+                            not: null,
+                        },
+
+                        lng: {
+                            not: null,
+                        },
+
+                        ubicacionActualizadaEn: {
+                            gte:
+                                limiteGps,
+                        },
+
+                    },
+
+                    select: {
+
+                        id:
+                            true,
+
+                        lat:
+                            true,
+
+                        lng:
+                            true,
+
+                    },
+
+                });
+
+
+            /*
+             * No exponemos información privada.
+             *
+             * Redondeamos algo la posición.
+             * 4 decimales ≈ 10 m.
+             */
+            const resultado =
+                taxistas.map(
+                    (taxista) => ({
+
+                        id:
+                            taxista.id,
+
+                        lat:
+                            Number(
+                                Number(
+                                    taxista.lat
+                                ).toFixed(4)
+                            ),
+
+                        lng:
+                            Number(
+                                Number(
+                                    taxista.lng
+                                ).toFixed(4)
+                            ),
+
+                    })
+                );
+
+
+            return res.json({
+
+                ok:
+                    true,
+
+                total:
+                    resultado.length,
+
+                taxistas:
+                    resultado,
+
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "Error GET /cliente/taxistas-disponibles:",
+                error
+            );
+
+
+            return res.status(500).json({
+
+                ok:
+                    false,
+
+                error:
+                    "No se pudieron consultar los taxis disponibles.",
+
+            });
+
+        }
+
+    }
+);
+
 module.exports = router;
