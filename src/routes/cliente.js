@@ -207,15 +207,57 @@ router.get("/estado/:id", async (req, res) => {
         const taxista = solicitud.asignacion?.taxista || null;
         const vehiculo = solicitud.asignacion?.vehiculo || taxista?.vehiculo || null;
 
-        const valoracionTaxista =
-            taxista
-                ? await obtenerValoracionTaxista(
-                    taxista.id
-                )
-                : {
-                    media: null,
-                    total: 0,
-                };
+        let valoracionMedia = null;
+        let numeroValoraciones = 0;
+
+        if (taxista?.id) {
+
+            const valoracion =
+                await prisma.solicitudViaje.aggregate({
+
+                    where: {
+
+                        estado: "completada",
+
+                        ratingCliente: {
+                            not: null,
+                        },
+
+                        asignacion: {
+                            is: {
+                                taxistaId: taxista.id,
+                            },
+                        },
+
+                    },
+
+                    _avg: {
+                        ratingCliente: true,
+                    },
+
+                    _count: {
+                        ratingCliente: true,
+                    },
+
+                });
+
+
+            if (
+                typeof valoracion?._avg?.ratingCliente ===
+                "number"
+            ) {
+
+                valoracionMedia =
+                    Math.round(
+                        valoracion._avg.ratingCliente * 10
+                    ) / 10;
+
+            }
+
+
+            numeroValoraciones =
+                valoracion?._count?.ratingCliente || 0;
+        }
 
         let distanciaTaxiMetros = null;
         let etaMinutos = null;
@@ -255,9 +297,7 @@ router.get("/estado/:id", async (req, res) => {
                 distanciaTaxiMetros,
                 taxista: taxista
                     ? {
-
-                        id:
-                            taxista.id,
+                        id: taxista.id,
 
                         nombreCompleto:
                             taxista.nombreCompleto,
@@ -286,16 +326,9 @@ router.get("/estado/:id", async (req, res) => {
                         ubicacionActualizadaEn:
                             taxista.ubicacionActualizadaEn ?? null,
 
+                        valoracionMedia,
 
-                        /*
-                         * VALORACIÓN HISTÓRICA
-                         */
-                        valoracionMedia:
-                            valoracionTaxista.media,
-
-                        numeroValoraciones:
-                            valoracionTaxista.total,
-
+                        numeroValoraciones,
                     }
                     : null,
             },
