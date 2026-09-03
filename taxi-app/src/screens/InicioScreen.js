@@ -2232,160 +2232,66 @@ export default function InicioScreen() {
                 ACCIONES SERVICIO
             ================================================= */}
 
-              <View
-                style={
-                  styles.servicioActionsRow
-                }
-              >
+              <View style={styles.servicioActionsRow}>
 
                 {!servicioActivo?.recogidaIniciadaEn ? (
 
-                  <>
-                    <TouchableOpacity
-                      style={
-                        styles.clienteRecogidoButton
-                      }
-                      onPress={
-                        confirmarClienteRecogido
-                      }
-                    >
+                  <View style={styles.recogidaActionsRow}>
 
+                    <TouchableOpacity
+                      style={styles.clienteRecogidoButton}
+                      onPress={confirmarClienteRecogido}
+                      activeOpacity={0.85}
+                    >
                       <Ionicons
                         name="person-circle-outline"
-                        size={21}
+                        size={20}
                         color="#ffffff"
                       />
 
-                      <Text
-                        style={
-                          styles.clienteRecogidoText
-                        }
-                      >
+                      <Text style={styles.clienteRecogidoText}>
                         Cliente recogido
                       </Text>
-
                     </TouchableOpacity>
 
 
                     <TouchableOpacity
-                      style={
-                        styles.clienteNoLocalizadoButton
-                      }
-                      onPress={
-                        clienteNoLocalizado
-                      }
+                      style={styles.clienteNoLocalizadoButton}
+                      onPress={clienteNoLocalizado}
+                      activeOpacity={0.85}
                     >
-
                       <Ionicons
                         name="person-remove-outline"
                         size={20}
                         color="#b91c1c"
                       />
 
-                      <Text
-                        style={
-                          styles.clienteNoLocalizadoText
-                        }
-                      >
-                        Cliente no localizado
+                      <Text style={styles.clienteNoLocalizadoText}>
+                        No localizado
                       </Text>
-
                     </TouchableOpacity>
-
-                  </>
-
-                ) : (
-
-                  <View
-                    style={
-                      styles.trayectoActivoBox
-                    }
-                  >
-
-                    <Ionicons
-                      name="navigate-circle-outline"
-                      size={22}
-                      color="#166534"
-                    />
-
-                    <View style={{ flex: 1 }}>
-
-                      <Text
-                        style={
-                          styles.trayectoActivoTitle
-                        }
-                      >
-                        Trayecto iniciado
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.trayectoActivoSubtitle
-                        }
-                      >
-                        El cliente ya está a bordo.
-                      </Text>
-
-                    </View>
 
                   </View>
 
-                )}
-
-
-                {servicioActivo?.recogidaIniciadaEn && (
+                ) : (
 
                   <TouchableOpacity
-                    style={
-                      styles.finishButton
-                    }
-                    onPress={
-                      abrirCerrarServicio
-                    }
+                    style={styles.finishButton}
+                    onPress={abrirCerrarServicio}
+                    activeOpacity={0.85}
                   >
+                    <Ionicons
+                      name="checkmark-done-outline"
+                      size={18}
+                      color="#ffffff"
+                    />
 
-                    <Text
-                      style={
-                        styles.finishButtonText
-                      }
-                    >
+                    <Text style={styles.finishButtonText}>
                       Finalizar servicio
                     </Text>
-
                   </TouchableOpacity>
 
                 )}
-
-                <TouchableOpacity
-
-                  style={
-                    styles.finishButton
-                  }
-
-                  onPress={
-                    abrirCerrarServicio
-                  }
-
-                  activeOpacity={0.85}
-
-                >
-
-                  <Ionicons
-                    name="checkmark-done-outline"
-                    size={18}
-                    color="#ffffff"
-                  />
-
-
-                  <Text
-                    style={
-                      styles.finishButtonText
-                    }
-                  >
-                    Finalizar
-                  </Text>
-
-                </TouchableOpacity>
 
               </View>
 
@@ -3432,74 +3338,78 @@ const styles =
 
     servicioActionsRow: {
       marginTop: 7,
-
-      flexDirection: "row",
-
+      flexDirection: "column",
       gap: 7,
     },
 
 
-    clienteNoLocalizadoButton: {
+    clienteRecogidoButton: {
       flex: 1,
+      height: 48,
+      borderRadius: 14,
 
-      minHeight: 42,
-
-      paddingHorizontal: 8,
-
-      borderRadius: 12,
-
-      borderWidth: 1,
-
-      borderColor: "#fecaca",
-
-      backgroundColor: "#fef2f2",
+      backgroundColor: "#111827",
 
       flexDirection: "row",
-
       alignItems: "center",
-
       justifyContent: "center",
 
-      gap: 5,
+      gap: 7,
+      paddingHorizontal: 10,
     },
 
+    clienteRecogidoText: {
+      color: "#ffffff",
+      fontSize: 13,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+
+    clienteNoLocalizadoButton: {
+      flex: 1,
+      height: 48,
+      borderRadius: 14,
+
+      backgroundColor: "#fff1f2",
+
+      borderWidth: 1,
+      borderColor: "#fecdd3",
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      gap: 7,
+      paddingHorizontal: 10,
+    },
 
     clienteNoLocalizadoText: {
       color: "#b91c1c",
-
-      fontSize: 11,
-
+      fontSize: 13,
       fontWeight: "800",
+      textAlign: "center",
     },
 
 
     finishButton: {
-      flex: 1,
-
-      minHeight: 42,
-
-      paddingHorizontal: 8,
-
-      backgroundColor: "#16a34a",
+      width: "100%",
+      minHeight: 39,
 
       borderRadius: 12,
 
+      backgroundColor: "#16a34a",
+
       flexDirection: "row",
-
       alignItems: "center",
-
       justifyContent: "center",
 
-      gap: 5,
+      gap: 7,
     },
-
 
     finishButtonText: {
       color: "#ffffff",
-
-      fontSize: 12,
-
-      fontWeight: "800",
+      fontSize: 13,
+      fontWeight: "700",
     },
 
 
@@ -3826,46 +3736,6 @@ const styles =
       color: "#64748b",
     },
 
-    clienteRecogidoButton: {
-
-      marginTop: 12,
-
-      minHeight: 52,
-
-      borderRadius: 16,
-
-      backgroundColor:
-        "#111827",
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-
-      gap:
-        8,
-
-      paddingHorizontal:
-        14,
-
-    },
-
-    clienteRecogidoText: {
-
-      color:
-        "#ffffff",
-
-      fontSize:
-        15,
-
-      fontWeight:
-        "800",
-
-    },
 
     trayectoActivoBox: {
 
@@ -3931,6 +3801,11 @@ const styles =
       fontWeight:
         "600",
 
+    },
+    recogidaActionsRow: {
+      flexDirection: "row",
+      gap: 7,
+      width: "100%",
     },
 
   });

@@ -1105,12 +1105,7 @@ export default function RideScreen() {
                                         rating,
                                         comentario,
                                     });
-                                    Alert.alert("Gracias", "Tu valoración se ha guardado", [
-                                        {
-                                            text: "Aceptar",
-                                            onPress: () => volverInicioLimpio(),
-                                        },
-                                    ]);
+                                    
                                 } catch (error) {
                                     Alert.alert("Error", error.message || "No se pudo guardar la valoración");
                                 } finally {
