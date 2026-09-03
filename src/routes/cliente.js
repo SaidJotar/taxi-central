@@ -108,6 +108,75 @@ router.post("/solicitar", async (req, res) => {
     }
 });
 
+async function obtenerValoracionTaxista(
+    taxistaId
+) {
+
+    if (!taxistaId) {
+
+        return {
+            media: null,
+            total: 0,
+        };
+
+    }
+
+
+    const resultado =
+        await prisma.solicitudViaje.aggregate({
+
+            where: {
+
+                estado:
+                    "completada",
+
+                ratingCliente: {
+                    not: null,
+                },
+
+                asignacion: {
+                    is: {
+                        taxistaId:
+                            taxistaId,
+                    },
+                },
+
+            },
+
+            _avg: {
+                ratingCliente: true,
+            },
+
+            _count: {
+                ratingCliente: true,
+            },
+
+        });
+
+
+    const mediaRaw =
+        resultado?._avg?.ratingCliente;
+
+
+    const total =
+        resultado?._count?.ratingCliente || 0;
+
+
+    return {
+
+        media:
+            typeof mediaRaw === "number"
+                ? Math.round(
+                    mediaRaw * 10
+                ) / 10
+                : null,
+
+        total,
+
+    };
+
+}
+
 router.get("/estado/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -137,6 +206,16 @@ router.get("/estado/:id", async (req, res) => {
 
         const taxista = solicitud.asignacion?.taxista || null;
         const vehiculo = solicitud.asignacion?.vehiculo || taxista?.vehiculo || null;
+
+        const valoracionTaxista =
+            taxista
+                ? await obtenerValoracionTaxista(
+                    taxista.id
+                )
+                : {
+                    media: null,
+                    total: 0,
+                };
 
         let distanciaTaxiMetros = null;
         let etaMinutos = null;
@@ -176,16 +255,47 @@ router.get("/estado/:id", async (req, res) => {
                 distanciaTaxiMetros,
                 taxista: taxista
                     ? {
-                        id: taxista.id,
-                        nombreCompleto: taxista.nombreCompleto,
-                        telefono: taxista.telefono,
-                        numeroTaxi: vehiculo?.numeroTaxi || null,
-                        matricula: vehiculo?.matricula || null,
-                        marca: vehiculo?.marca || null,
-                        modelo: vehiculo?.modelo || null,
-                        lat: taxista.lat ?? null,
-                        lng: taxista.lng ?? null,
-                        ubicacionActualizadaEn: taxista.ubicacionActualizadaEn ?? null,
+
+                        id:
+                            taxista.id,
+
+                        nombreCompleto:
+                            taxista.nombreCompleto,
+
+                        telefono:
+                            taxista.telefono,
+
+                        numeroTaxi:
+                            vehiculo?.numeroTaxi || null,
+
+                        matricula:
+                            vehiculo?.matricula || null,
+
+                        marca:
+                            vehiculo?.marca || null,
+
+                        modelo:
+                            vehiculo?.modelo || null,
+
+                        lat:
+                            taxista.lat ?? null,
+
+                        lng:
+                            taxista.lng ?? null,
+
+                        ubicacionActualizadaEn:
+                            taxista.ubicacionActualizadaEn ?? null,
+
+
+                        /*
+                         * VALORACIÓN HISTÓRICA
+                         */
+                        valoracionMedia:
+                            valoracionTaxista.media,
+
+                        numeroValoraciones:
+                            valoracionTaxista.total,
+
                     }
                     : null,
             },
@@ -941,326 +1051,326 @@ router.get(
 */
 
 router.post(
-  "/reservas/:id/cancelar",
-  async (req, res) => {
-
-    try {
-
-      const {
-        id,
-      } = req.params;
-
-
-      const reserva =
-        await prisma.reservaTaxi.findUnique({
-          where: {
-            id,
-          },
-
-          include: {
-
-            taxista: {
-              include: {
-                vehiculo: true,
-              },
-            },
-
-          },
-        });
-
-
-      if (!reserva) {
-
-        return res.status(404).json({
-          ok: false,
-          error:
-            "Reserva no encontrada.",
-        });
-
-      }
-
-
-      /*
-       * Estos estados ya no permiten
-       * cancelar.
-       */
-      if (
-        reserva.estado === "cancelada" ||
-        reserva.estado === "completada" ||
-        reserva.estado === "en_servicio"
-      ) {
-
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Esta reserva ya no se puede cancelar.",
-        });
-
-      }
-
-
-      /*
-       * Guardamos el taxista antes
-       * de cancelar.
-       */
-      const taxistaId =
-        reserva.taxistaId;
-
-
-      const estabaAceptada =
-        reserva.estado ===
-          "aceptada" &&
-        !!taxistaId;
-
-
-      /*
-       * Cancelamos.
-       */
-      const actualizada =
-        await prisma.reservaTaxi.update({
-
-          where: {
-            id,
-          },
-
-          data: {
-
-            estado:
-              "cancelada",
-
-            canceladaEn:
-              new Date(),
-
-          },
-
-        });
-
-
-      /*
-       * ==================================================
-       * AVISO SOCKET AL TAXISTA
-       * ==================================================
-       */
-      if (
-        estabaAceptada
-      ) {
+    "/reservas/:id/cancelar",
+    async (req, res) => {
 
         try {
 
-          const {
-            obtenerIo,
-          } =
-            require("../socketSoloTwilio");
+            const {
+                id,
+            } = req.params;
 
 
-          const io =
-            obtenerIo();
+            const reserva =
+                await prisma.reservaTaxi.findUnique({
+                    where: {
+                        id,
+                    },
+
+                    include: {
+
+                        taxista: {
+                            include: {
+                                vehiculo: true,
+                            },
+                        },
+
+                    },
+                });
 
 
-          io.to(
-            `taxista:${taxistaId}`
-          ).emit(
-            "reserva:cancelada",
-            {
-              ok: true,
+            if (!reserva) {
 
-              reservaId:
-                reserva.id,
+                return res.status(404).json({
+                    ok: false,
+                    error:
+                        "Reserva no encontrada.",
+                });
 
-              fechaHora:
-                reserva.fechaHora,
-
-              direccionRecogida:
-                reserva.direccionRecogida,
-
-              telefonoCliente:
-                reserva.telefonoCliente,
-
-              mensaje:
-                "El cliente ha cancelado una reserva que tenías aceptada.",
             }
-          );
 
 
-          console.log(
-            "📅 Reserva aceptada cancelada por cliente:",
-            {
-              reservaId:
-                reserva.id,
+            /*
+             * Estos estados ya no permiten
+             * cancelar.
+             */
+            if (
+                reserva.estado === "cancelada" ||
+                reserva.estado === "completada" ||
+                reserva.estado === "en_servicio"
+            ) {
 
-              taxistaId,
+                return res.status(400).json({
+                    ok: false,
+                    error:
+                        "Esta reserva ya no se puede cancelar.",
+                });
+
             }
-          );
+
+
+            /*
+             * Guardamos el taxista antes
+             * de cancelar.
+             */
+            const taxistaId =
+                reserva.taxistaId;
+
+
+            const estabaAceptada =
+                reserva.estado ===
+                "aceptada" &&
+                !!taxistaId;
+
+
+            /*
+             * Cancelamos.
+             */
+            const actualizada =
+                await prisma.reservaTaxi.update({
+
+                    where: {
+                        id,
+                    },
+
+                    data: {
+
+                        estado:
+                            "cancelada",
+
+                        canceladaEn:
+                            new Date(),
+
+                    },
+
+                });
+
+
+            /*
+             * ==================================================
+             * AVISO SOCKET AL TAXISTA
+             * ==================================================
+             */
+            if (
+                estabaAceptada
+            ) {
+
+                try {
+
+                    const {
+                        obtenerIo,
+                    } =
+                        require("../socketSoloTwilio");
+
+
+                    const io =
+                        obtenerIo();
+
+
+                    io.to(
+                        `taxista:${taxistaId}`
+                    ).emit(
+                        "reserva:cancelada",
+                        {
+                            ok: true,
+
+                            reservaId:
+                                reserva.id,
+
+                            fechaHora:
+                                reserva.fechaHora,
+
+                            direccionRecogida:
+                                reserva.direccionRecogida,
+
+                            telefonoCliente:
+                                reserva.telefonoCliente,
+
+                            mensaje:
+                                "El cliente ha cancelado una reserva que tenías aceptada.",
+                        }
+                    );
+
+
+                    console.log(
+                        "📅 Reserva aceptada cancelada por cliente:",
+                        {
+                            reservaId:
+                                reserva.id,
+
+                            taxistaId,
+                        }
+                    );
+
+
+                } catch (
+                socketError
+                ) {
+
+                    console.log(
+                        "No se pudo emitir reserva:cancelada:",
+                        socketError.message
+                    );
+
+                }
+
+            }
+
+
+            /*
+             * ==================================================
+             * PUSH AL TAXISTA
+             * ==================================================
+             *
+             * Así también se entera si tiene
+             * la aplicación en segundo plano.
+             */
+            if (
+                estabaAceptada &&
+                reserva.taxista?.expoPushToken
+            ) {
+
+                try {
+
+                    await fetch(
+                        "https://exp.host/--/api/v2/push/send",
+                        {
+
+                            method:
+                                "POST",
+
+                            headers: {
+
+                                Accept:
+                                    "application/json",
+
+                                "Content-Type":
+                                    "application/json",
+
+                            },
+
+                            body:
+                                JSON.stringify({
+
+                                    to:
+                                        reserva.taxista.expoPushToken,
+
+                                    title:
+                                        "Reserva cancelada",
+
+                                    body:
+                                        `${formatearFechaReservaParaPush(
+                                            reserva.fechaHora
+                                        )} · ${reserva.direccionBase ||
+                                        reserva.direccionRecogida}`,
+
+                                    data: {
+
+                                        type:
+                                            "reserva_cancelada",
+
+                                        reservaId:
+                                            reserva.id,
+
+                                    },
+
+                                    priority:
+                                        "high",
+
+                                    channelId:
+                                        "default",
+
+                                }),
+
+                        }
+                    );
+
+
+                } catch (
+                pushError
+                ) {
+
+                    /*
+                     * No fallamos la cancelación
+                     * aunque falle el push.
+                     */
+                    console.log(
+                        "No se pudo enviar push de reserva cancelada:",
+                        pushError.message
+                    );
+
+                }
+
+            }
+
+
+            return res.json({
+
+                ok: true,
+
+                reserva:
+                    actualizada,
+
+            });
 
 
         } catch (
-          socketError
-        ) {
-
-          console.log(
-            "No se pudo emitir reserva:cancelada:",
-            socketError.message
-          );
-
-        }
-
-      }
-
-
-      /*
-       * ==================================================
-       * PUSH AL TAXISTA
-       * ==================================================
-       *
-       * Así también se entera si tiene
-       * la aplicación en segundo plano.
-       */
-      if (
-        estabaAceptada &&
-        reserva.taxista?.expoPushToken
-      ) {
-
-        try {
-
-          await fetch(
-            "https://exp.host/--/api/v2/push/send",
-            {
-
-              method:
-                "POST",
-
-              headers: {
-
-                Accept:
-                  "application/json",
-
-                "Content-Type":
-                  "application/json",
-
-              },
-
-              body:
-                JSON.stringify({
-
-                  to:
-                    reserva.taxista.expoPushToken,
-
-                  title:
-                    "Reserva cancelada",
-
-                  body:
-                    `${formatearFechaReservaParaPush(
-                      reserva.fechaHora
-                    )} · ${reserva.direccionBase ||
-                      reserva.direccionRecogida}`,
-
-                  data: {
-
-                    type:
-                      "reserva_cancelada",
-
-                    reservaId:
-                      reserva.id,
-
-                  },
-
-                  priority:
-                    "high",
-
-                  channelId:
-                    "default",
-
-                }),
-
-            }
-          );
-
-
-        } catch (
-          pushError
-        ) {
-
-          /*
-           * No fallamos la cancelación
-           * aunque falle el push.
-           */
-          console.log(
-            "No se pudo enviar push de reserva cancelada:",
-            pushError.message
-          );
-
-        }
-
-      }
-
-
-      return res.json({
-
-        ok: true,
-
-        reserva:
-          actualizada,
-
-      });
-
-
-    } catch (
-      error
-    ) {
-
-      console.error(
-        "Error POST /cliente/reservas/:id/cancelar:",
         error
-      );
+        ) {
+
+            console.error(
+                "Error POST /cliente/reservas/:id/cancelar:",
+                error
+            );
 
 
-      return res.status(500).json({
+            return res.status(500).json({
 
-        ok: false,
+                ok: false,
 
-        error:
-          "No se pudo cancelar la reserva.",
+                error:
+                    "No se pudo cancelar la reserva.",
 
-      });
+            });
+
+        }
 
     }
-
-  }
 );
 
 function formatearFechaReservaParaPush(
-  valor
+    valor
 ) {
 
-  try {
+    try {
 
-    return new Date(
-      valor
-    ).toLocaleString(
-      "es-ES",
-      {
-        timeZone:
-          "Europe/Madrid",
+        return new Date(
+            valor
+        ).toLocaleString(
+            "es-ES",
+            {
+                timeZone:
+                    "Europe/Madrid",
 
-        day:
-          "2-digit",
+                day:
+                    "2-digit",
 
-        month:
-          "2-digit",
+                month:
+                    "2-digit",
 
-        hour:
-          "2-digit",
+                hour:
+                    "2-digit",
 
-        minute:
-          "2-digit",
-      }
-    );
+                minute:
+                    "2-digit",
+            }
+        );
 
-  } catch {
+    } catch {
 
-    return "Reserva";
+        return "Reserva";
 
-  }
+    }
 
 }
 

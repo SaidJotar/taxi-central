@@ -653,6 +653,40 @@ export default function RideScreen() {
                                     {solicitud?.taxista?.nombreCompleto || "Taxista asignado"}
                                 </Text>
 
+                                {solicitud?.taxista?.numeroValoraciones > 0 ? (
+
+                                    <View style={styles.driverRatingRow}>
+
+                                        <Ionicons
+                                            name="star"
+                                            size={15}
+                                            color="#f59e0b"
+                                        />
+
+                                        <Text style={styles.driverRatingValue}>
+                                            {Number(
+                                                solicitud.taxista.valoracionMedia
+                                            ).toFixed(1)}
+                                        </Text>
+
+                                        <Text style={styles.driverRatingCount}>
+                                            · {solicitud.taxista.numeroValoraciones}
+                                            {" "}
+                                            {solicitud.taxista.numeroValoraciones === 1
+                                                ? "valoración"
+                                                : "valoraciones"}
+                                        </Text>
+
+                                    </View>
+
+                                ) : (
+
+                                    <Text style={styles.driverNoRating}>
+                                        Sin valoraciones todavía
+                                    </Text>
+
+                                )}
+
                                 <Text style={styles.driverMeta}>
                                     {solicitud?.taxista?.numeroTaxi
                                         ? `Taxi ${solicitud.taxista.numeroTaxi}`
@@ -1155,5 +1189,36 @@ const styles = StyleSheet.create({
         height: 8,
         borderRadius: 4,
         backgroundColor: "#ef4444",
+    },
+    driverRatingRow: {
+        marginTop: 3,
+
+        flexDirection: "row",
+
+        alignItems: "center",
+
+        gap: 3,
+    },
+
+    driverRatingValue: {
+        fontSize: 13,
+
+        fontWeight: "800",
+
+        color: "#111827",
+    },
+
+    driverRatingCount: {
+        fontSize: 12,
+
+        color: "#64748b",
+    },
+
+    driverNoRating: {
+        marginTop: 3,
+
+        fontSize: 12,
+
+        color: "#94a3b8",
     },
 });

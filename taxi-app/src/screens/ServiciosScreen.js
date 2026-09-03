@@ -16,6 +16,7 @@ import AppBadge from "../components/ui/AppBadge";
 import SectionHeader from "../components/ui/SectionHeader";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ServiciosScreen() {
   const { token } = useAuth();
@@ -360,15 +361,84 @@ export default function ServiciosScreen() {
                 </Text>
               </View>
 
-              {!!item.comentarioRating && (
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Comentario</Text>
+              <View style={styles.ratingSection}>
 
-                  <Text style={styles.metaValue}>
-                    {item.comentarioRating}
-                  </Text>
-                </View>
-              )}
+                <Text style={styles.ratingLabel}>
+                  Valoración del cliente
+                </Text>
+
+
+                {item.rating != null ? (
+
+                  <>
+
+                    <View style={styles.ratingStarsRow}>
+
+                      {[1, 2, 3, 4, 5].map(
+                        (estrella) => (
+
+                          <Ionicons
+                            key={estrella}
+                            name={
+                              estrella <= Number(item.rating)
+                                ? "star"
+                                : "star-outline"
+                            }
+                            size={18}
+                            color="#f59e0b"
+                          />
+
+                        )
+                      )}
+
+
+                      <Text style={styles.ratingNumber}>
+                        {Number(item.rating).toFixed(0)}/5
+                      </Text>
+
+                    </View>
+
+
+                    {!!item.comentarioRating && (
+
+                      <View style={styles.ratingCommentBox}>
+
+                        <Ionicons
+                          name="chatbubble-outline"
+                          size={15}
+                          color="#64748b"
+                        />
+
+
+                        <Text style={styles.ratingComment}>
+                          {item.comentarioRating}
+                        </Text>
+
+                      </View>
+
+                    )}
+
+                  </>
+
+                ) : (
+
+                  <View style={styles.noRatingRow}>
+
+                    <Ionicons
+                      name="star-outline"
+                      size={16}
+                      color="#94a3b8"
+                    />
+
+                    <Text style={styles.noRatingText}>
+                      Sin valorar
+                    </Text>
+
+                  </View>
+
+                )}
+
+              </View>
             </AppCard>
           ))}
       </ScrollView>
@@ -642,5 +712,90 @@ const styles = StyleSheet.create({
   empty: {
     color: "#6b7280",
     fontSize: 15,
+  },
+  ratingSection: {
+    marginTop: 4,
+
+    paddingTop: 12,
+
+    borderTopWidth: 1,
+
+    borderTopColor: "#e2e8f0",
+  },
+
+  ratingLabel: {
+    fontSize: 12,
+
+    fontWeight: "700",
+
+    color: "#64748b",
+
+    textTransform: "uppercase",
+
+    marginBottom: 6,
+  },
+
+  ratingStarsRow: {
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    gap: 2,
+  },
+
+  ratingNumber: {
+    marginLeft: 6,
+
+    fontSize: 14,
+
+    fontWeight: "800",
+
+    color: "#0f172a",
+  },
+
+  ratingCommentBox: {
+    marginTop: 9,
+
+    paddingVertical: 9,
+
+    paddingHorizontal: 10,
+
+    borderRadius: 10,
+
+    backgroundColor: "#f8fafc",
+
+    flexDirection: "row",
+
+    alignItems: "flex-start",
+
+    gap: 7,
+  },
+
+  ratingComment: {
+    flex: 1,
+
+    fontSize: 13,
+
+    lineHeight: 18,
+
+    color: "#475569",
+
+    fontStyle: "italic",
+  },
+
+  noRatingRow: {
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    gap: 6,
+  },
+
+  noRatingText: {
+    fontSize: 13,
+
+    color: "#94a3b8",
+
+    fontWeight: "600",
   },
 });
