@@ -32,7 +32,7 @@ const etaRoutesCache =
 
 
 const ETA_ROUTES_MIN_INTERVAL_MS =
-    90 * 1000;
+    60 * 1000;
 
 
 const ETA_ROUTES_MOVIMIENTO_MIN_METROS =
@@ -643,11 +643,7 @@ if (
                 etaMinutos,
                 distanciaTaxiMetros,
                 etaFuente,
-                rutaPolyline:
-                etaMinutos != null &&
-                    etaMinutos <= 3
-                    ? rutaPolyline
-                    : null,
+                rutaPolyline: rutaPolyline || null,
                 taxista: taxista
                     ? {
                         id: taxista.id,
