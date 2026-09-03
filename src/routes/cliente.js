@@ -885,16 +885,25 @@ router.get(
             const reservas =
                 await prisma.reservaTaxi.findMany({
                     where: {
+
                         telefonoCliente:
                             telefono,
+
+                        estado: {
+                            not:
+                                "cancelada",
+                        },
+
                     },
 
                     include: {
+
                         taxista: {
                             include: {
                                 vehiculo: true,
                             },
                         },
+
                     },
 
                     orderBy: {
@@ -932,117 +941,327 @@ router.get(
 */
 
 router.post(
-    "/reservas/:id/cancelar",
-    async (req, res) => {
+  "/reservas/:id/cancelar",
+  async (req, res) => {
+
+    try {
+
+      const {
+        id,
+      } = req.params;
+
+
+      const reserva =
+        await prisma.reservaTaxi.findUnique({
+          where: {
+            id,
+          },
+
+          include: {
+
+            taxista: {
+              include: {
+                vehiculo: true,
+              },
+            },
+
+          },
+        });
+
+
+      if (!reserva) {
+
+        return res.status(404).json({
+          ok: false,
+          error:
+            "Reserva no encontrada.",
+        });
+
+      }
+
+
+      /*
+       * Estos estados ya no permiten
+       * cancelar.
+       */
+      if (
+        reserva.estado === "cancelada" ||
+        reserva.estado === "completada" ||
+        reserva.estado === "en_servicio"
+      ) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Esta reserva ya no se puede cancelar.",
+        });
+
+      }
+
+
+      /*
+       * Guardamos el taxista antes
+       * de cancelar.
+       */
+      const taxistaId =
+        reserva.taxistaId;
+
+
+      const estabaAceptada =
+        reserva.estado ===
+          "aceptada" &&
+        !!taxistaId;
+
+
+      /*
+       * Cancelamos.
+       */
+      const actualizada =
+        await prisma.reservaTaxi.update({
+
+          where: {
+            id,
+          },
+
+          data: {
+
+            estado:
+              "cancelada",
+
+            canceladaEn:
+              new Date(),
+
+          },
+
+        });
+
+
+      /*
+       * ==================================================
+       * AVISO SOCKET AL TAXISTA
+       * ==================================================
+       */
+      if (
+        estabaAceptada
+      ) {
+
         try {
-            const {
-                id,
-            } = req.params;
+
+          const {
+            obtenerIo,
+          } =
+            require("../socketSoloTwilio");
 
 
-            const reserva =
-                await prisma.reservaTaxi.findUnique({
-                    where: {
-                        id,
-                    },
-                });
+          const io =
+            obtenerIo();
 
 
-            if (!reserva) {
-                return res.status(404).json({
-                    ok: false,
-                    error:
-                        "Reserva no encontrada.",
-                });
+          io.to(
+            `taxista:${taxistaId}`
+          ).emit(
+            "reserva:cancelada",
+            {
+              ok: true,
+
+              reservaId:
+                reserva.id,
+
+              fechaHora:
+                reserva.fechaHora,
+
+              direccionRecogida:
+                reserva.direccionRecogida,
+
+              telefonoCliente:
+                reserva.telefonoCliente,
+
+              mensaje:
+                "El cliente ha cancelado una reserva que tenías aceptada.",
             }
+          );
 
 
-            if (
-                reserva.estado ===
-                    "cancelada" ||
-                reserva.estado ===
-                    "completada" ||
-                reserva.estado ===
-                    "en_servicio"
-            ) {
-                return res.status(400).json({
-                    ok: false,
-                    error:
-                        "Esta reserva ya no se puede cancelar.",
-                });
+          console.log(
+            "📅 Reserva aceptada cancelada por cliente:",
+            {
+              reservaId:
+                reserva.id,
+
+              taxistaId,
             }
+          );
 
 
-            const actualizada =
-                await prisma.reservaTaxi.update({
-                    where: {
-                        id,
-                    },
+        } catch (
+          socketError
+        ) {
 
-                    data: {
-                        estado:
-                            "cancelada",
+          console.log(
+            "No se pudo emitir reserva:cancelada:",
+            socketError.message
+          );
 
-                        canceladaEn:
-                            new Date(),
-                    },
-                });
-
-
-            /*
-             * Si ya la había aceptado
-             * un taxista, le avisamos.
-             */
-            if (
-                reserva.taxistaId
-            ) {
-                try {
-                    const {
-                        obtenerIo,
-                    } =
-                        require("../socketSoloTwilio");
-
-                    const io =
-                        obtenerIo();
-
-                    io.to(
-                        `taxista:${reserva.taxistaId}`
-                    ).emit(
-                        "reserva:cancelada",
-                        {
-                            reservaId:
-                                reserva.id,
-                        }
-                    );
-
-                } catch (socketError) {
-                    console.log(
-                        "No se pudo emitir reserva:cancelada:",
-                        socketError.message
-                    );
-                }
-            }
-
-
-            return res.json({
-                ok: true,
-                reserva:
-                    actualizada,
-            });
-
-        } catch (error) {
-            console.error(
-                "Error cancelar reserva:",
-                error
-            );
-
-            return res.status(500).json({
-                ok: false,
-                error:
-                    "No se pudo cancelar la reserva.",
-            });
         }
+
+      }
+
+
+      /*
+       * ==================================================
+       * PUSH AL TAXISTA
+       * ==================================================
+       *
+       * Así también se entera si tiene
+       * la aplicación en segundo plano.
+       */
+      if (
+        estabaAceptada &&
+        reserva.taxista?.expoPushToken
+      ) {
+
+        try {
+
+          await fetch(
+            "https://exp.host/--/api/v2/push/send",
+            {
+
+              method:
+                "POST",
+
+              headers: {
+
+                Accept:
+                  "application/json",
+
+                "Content-Type":
+                  "application/json",
+
+              },
+
+              body:
+                JSON.stringify({
+
+                  to:
+                    reserva.taxista.expoPushToken,
+
+                  title:
+                    "Reserva cancelada",
+
+                  body:
+                    `${formatearFechaReservaParaPush(
+                      reserva.fechaHora
+                    )} · ${reserva.direccionBase ||
+                      reserva.direccionRecogida}`,
+
+                  data: {
+
+                    type:
+                      "reserva_cancelada",
+
+                    reservaId:
+                      reserva.id,
+
+                  },
+
+                  priority:
+                    "high",
+
+                  channelId:
+                    "default",
+
+                }),
+
+            }
+          );
+
+
+        } catch (
+          pushError
+        ) {
+
+          /*
+           * No fallamos la cancelación
+           * aunque falle el push.
+           */
+          console.log(
+            "No se pudo enviar push de reserva cancelada:",
+            pushError.message
+          );
+
+        }
+
+      }
+
+
+      return res.json({
+
+        ok: true,
+
+        reserva:
+          actualizada,
+
+      });
+
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error POST /cliente/reservas/:id/cancelar:",
+        error
+      );
+
+
+      return res.status(500).json({
+
+        ok: false,
+
+        error:
+          "No se pudo cancelar la reserva.",
+
+      });
+
     }
+
+  }
 );
+
+function formatearFechaReservaParaPush(
+  valor
+) {
+
+  try {
+
+    return new Date(
+      valor
+    ).toLocaleString(
+      "es-ES",
+      {
+        timeZone:
+          "Europe/Madrid",
+
+        day:
+          "2-digit",
+
+        month:
+          "2-digit",
+
+        hour:
+          "2-digit",
+
+        minute:
+          "2-digit",
+      }
+    );
+
+  } catch {
+
+    return "Reserva";
+
+  }
+
+}
 
 module.exports = router;

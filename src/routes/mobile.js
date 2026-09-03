@@ -643,6 +643,9 @@ router.get(
 
                         creadaEn:
                             true,
+
+                        telefonoCliente: 
+                            true,
                     },
                 });
 

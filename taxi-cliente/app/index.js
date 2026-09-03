@@ -142,9 +142,9 @@ export default function HomeScreen() {
    * el modal apareció porque pulsó CAMBIAR TELÉFONO
    */
   const [
-    pedirTaxiTrasTelefono,
-    setPedirTaxiTrasTelefono,
-  ] = useState(false);
+    accionTrasTelefono,
+    setAccionTrasTelefono,
+  ] = useState(null);
 
 
   /*
@@ -372,7 +372,7 @@ export default function HomeScreen() {
 
         const direccion =
           typeof params.originalDireccion === "string" &&
-          params.originalDireccion
+            params.originalDireccion
             ? params.originalDireccion
             : "Mi ubicación actual";
 
@@ -442,7 +442,7 @@ export default function HomeScreen() {
 
         const direccion =
           typeof params.direccion === "string" &&
-          params.direccion
+            params.direccion
             ? params.direccion
             : "Ubicación actual";
 
@@ -784,10 +784,15 @@ export default function HomeScreen() {
    * BOTÓN PEDIR TAXI
    * =====================================================
    */
+  /*
+   * =====================================================
+   * BOTÓN PEDIR TAXI
+   * =====================================================
+   */
   async function pedirTaxi() {
 
     /*
-     * Ya tiene teléfono.
+     * Ya tiene teléfono guardado.
      */
     if (telefonoCliente) {
 
@@ -796,21 +801,152 @@ export default function HomeScreen() {
       );
 
       return;
-
     }
 
 
     /*
-     * Primera vez.
+     * No tiene teléfono.
      *
-     * Al guardar el teléfono
-     * pediremos taxi automáticamente.
+     * Abrimos modal y recordamos
+     * que después hay que pedir taxi.
      */
-    setTelefonoInput("+34");
+    setAccionTrasTelefono(
+      "pedirTaxi"
+    );
 
-    setPedirTaxiTrasTelefono(true);
+    setTelefonoInput(
+      "+34"
+    );
 
-    setModalTelefonoVisible(true);
+    setModalTelefonoVisible(
+      true
+    );
+
+  }
+
+
+  /*
+   * =====================================================
+   * BOTÓN RESERVAR TAXI
+   * =====================================================
+   */
+  function abrirReserva() {
+
+    /*
+     * Si todavía no tiene teléfono,
+     * primero se lo pedimos.
+     */
+    if (!telefonoCliente) {
+
+      setAccionTrasTelefono(
+        "reservar"
+      );
+
+      setTelefonoInput(
+        "+34"
+      );
+
+      setModalTelefonoVisible(
+        true
+      );
+
+      return;
+    }
+
+
+    /*
+     * Ya tiene teléfono.
+     */
+    irAReserva(
+      telefonoCliente
+    );
+
+  }
+
+  function abrirMisReservas() {
+
+    if (!telefonoCliente) {
+
+      setAccionTrasTelefono(
+        "misReservas"
+      );
+
+      setTelefonoInput("+34");
+
+      setModalTelefonoVisible(true);
+
+      return;
+    }
+
+
+    router.push({
+      pathname: "/reservas",
+
+      params: {
+        telefono:
+          telefonoCliente,
+      },
+    });
+
+  }
+
+
+  /*
+   * =====================================================
+   * IR A PANTALLA DE RESERVA
+   * =====================================================
+   */
+  function irAReserva(
+    telefono
+  ) {
+
+    if (!pickup || !miUbicacion) {
+
+      Alert.alert(
+        "Ubicación",
+        "Todavía no tenemos tu punto de recogida."
+      );
+
+      return;
+    }
+
+
+    router.push({
+
+      pathname:
+        "/reservar",
+
+      params: {
+
+        lat:
+          String(
+            pickup?.latitude ??
+            miUbicacion.latitude
+          ),
+
+        lng:
+          String(
+            pickup?.longitude ??
+            miUbicacion.longitude
+          ),
+
+        direccion:
+          pickup?.direccionRecogida ||
+          "",
+
+        direccionBase:
+          pickup?.direccionBase ||
+          pickup?.direccionRecogida ||
+          "",
+
+        referencia:
+          referencia || "",
+
+        telefono:
+          telefono,
+      },
+
+    });
 
   }
 
@@ -823,17 +959,23 @@ export default function HomeScreen() {
   function cambiarTelefono() {
 
     /*
-     * Importantísimo:
+     * null significa:
      *
-     * false = NO pedir taxi después.
+     * después de guardar el teléfono
+     * NO hacemos ninguna otra acción.
      */
-    setPedirTaxiTrasTelefono(false);
-
-    setTelefonoInput(
-      telefonoCliente || "+34"
+    setAccionTrasTelefono(
+      null
     );
 
-    setModalTelefonoVisible(true);
+    setTelefonoInput(
+      telefonoCliente ||
+      "+34"
+    );
+
+    setModalTelefonoVisible(
+      true
+    );
 
   }
 
@@ -846,12 +988,16 @@ export default function HomeScreen() {
   function cerrarModalTelefono() {
 
     /*
-     * Evitamos que quede pendiente
-     * una solicitud automática.
+     * Cancelamos cualquier acción
+     * que estuviese pendiente.
      */
-    setPedirTaxiTrasTelefono(false);
+    setAccionTrasTelefono(
+      null
+    );
 
-    setModalTelefonoVisible(false);
+    setModalTelefonoVisible(
+      false
+    );
 
     Keyboard.dismiss();
 
@@ -879,32 +1025,43 @@ export default function HomeScreen() {
       );
 
       return;
-
     }
 
 
     /*
-     * Guardamos el valor actual ANTES
-     * de modificar el estado.
+     * Guardamos la acción ANTES
+     * de ponerla a null.
      *
-     * Si true -> pedir taxi.
-     * Si false -> solo cambiar teléfono.
+     * Puede ser:
+     *
+     * "pedirTaxi"
+     * "reservar"
+     * null
      */
-    const debePedirTaxi =
-      pedirTaxiTrasTelefono;
+    const accion =
+      accionTrasTelefono;
 
 
     try {
 
-      setGuardandoTelefono(true);
+      setGuardandoTelefono(
+        true
+      );
 
 
+      /*
+       * Guardamos permanentemente
+       * el teléfono en el dispositivo.
+       */
       await SecureStore.setItemAsync(
         "telefonoCliente",
         telefono
       );
 
 
+      /*
+       * Actualizamos interfaz.
+       */
       setTelefonoCliente(
         telefono
       );
@@ -914,31 +1071,82 @@ export default function HomeScreen() {
       );
 
 
+      /*
+       * Cerramos modal.
+       */
       setModalTelefonoVisible(
         false
       );
 
-
-      setPedirTaxiTrasTelefono(
-        false
+      setAccionTrasTelefono(
+        null
       );
-
 
       Keyboard.dismiss();
 
 
       /*
-       * SOLO SI EL MODAL SE ABRIÓ
-       * DESDE "PEDIR TAXI".
+       * ==================================================
+       * VENÍA DE PEDIR TAXI
+       * ==================================================
        */
-      if (debePedirTaxi) {
+      if (
+        accion ===
+        "pedirTaxi"
+      ) {
 
         await crearSolicitudTaxi(
           telefono
         );
 
+        return;
       }
 
+
+      /*
+       * ==================================================
+       * VENÍA DE RESERVAR TAXI
+       * ==================================================
+       */
+      if (
+        accion ===
+        "reservar"
+      ) {
+
+        irAReserva(
+          telefono
+        );
+
+        return;
+      }
+
+      if (
+        accion ===
+        "misReservas"
+      ) {
+
+        router.push({
+          pathname: "/reservas",
+
+          params: {
+            telefono,
+          },
+        });
+
+        return;
+      }
+
+
+      /*
+       * ==================================================
+       * VENÍA DE CAMBIAR TELÉFONO
+       * ==================================================
+       *
+       * No hacemos nada más.
+       *
+       * Ya está guardado y el modal
+       * simplemente se cierra.
+       */
 
     } catch (error) {
 
@@ -956,7 +1164,9 @@ export default function HomeScreen() {
 
     } finally {
 
-      setGuardandoTelefono(false);
+      setGuardandoTelefono(
+        false
+      );
 
     }
 
@@ -985,7 +1195,7 @@ export default function HomeScreen() {
         <Text
           style={styles.loadingText}
         >
-          Obteniendo tu ubicación…
+          Iniciando aplicación…
         </Text>
 
       </View>
@@ -1151,95 +1361,63 @@ export default function HomeScreen() {
           ]}
         >
 
-          <View
-            style={
-              styles.dragHandle
-            }
-          />
-
-
-          <Text
-            style={
-              styles.title
-            }
-          >
-
-            {cambiandoRecogida
-              ? "Elige dónde te recogemos"
-              : "¿Te recogemos aquí?"}
-
-          </Text>
-
-
-          {!cambiandoRecogida && (
-
-            <Text
-              style={
-                styles.subtitle
-              }
-            >
-              Hemos detectado tu ubicación automáticamente.
-            </Text>
-
-          )}
-
 
           {/* =================================================
-              DIRECCIÓN
-          ================================================= */}
+                DIRECCIÓN
+            ================================================= */}
 
-          <View
-            style={
-              styles.addressBox
-            }
-          >
+          <View style={styles.pickupCard}>
 
-            <View
-              style={
-                styles.addressIcon
-              }
-            >
+            <View style={styles.pickupTop}>
 
-              <Ionicons
-                name="location"
-                size={20}
-                color="#111827"
-              />
+              <View style={styles.iconCircle}>
 
-            </View>
+                <Ionicons
+                  name="location"
+                  size={19}
+                  color="#111827"
+                />
+
+              </View>
 
 
-            <View
-              style={{
-                flex: 1,
-              }}
-            >
+              <View style={{ flex: 1 }}>
 
-              <Text
-                style={
-                  styles.addressLabel
-                }
-              >
-                Punto de recogida
-              </Text>
+                <Text style={styles.pickupLabel}>
+                  Recogida
+                </Text>
 
 
-              <Text
-                style={
-                  styles.addressValue
-                }
-              >
+                <Text
+                  style={styles.pickupAddress}
+                  numberOfLines={2}
+                >
+                  {addressLoading
+                    ? "Buscando dirección…"
+                    : direccion}
+                </Text>
 
-                {addressLoading
-                  ? "Buscando dirección…"
-                  : direccion}
+              </View>
 
-              </Text>
+
+              {!cambiandoRecogida && (
+
+                <TouchableOpacity
+                  style={styles.changePickupSmall}
+                  onPress={() =>
+                    setCambiandoRecogida(true)
+                  }
+                >
+                  <Text style={styles.changePickupSmallText}>
+                    Cambiar
+                  </Text>
+                </TouchableOpacity>
+
+              )}
 
             </View>
 
           </View>
-
 
           {/* =================================================
               REFERENCIA
@@ -1353,34 +1531,43 @@ export default function HomeScreen() {
 
               </TouchableOpacity>
 
+              <View style={styles.reservationsRow}>
 
-              <TouchableOpacity
-
-                style={
-                  styles.changeButton
-                }
-
-                onPress={() =>
-                  setCambiandoRecogida(true)
-                }
-
-              >
-
-                <Ionicons
-                  name="map-outline"
-                  size={18}
-                  color="#334155"
-                />
-
-                <Text
-                  style={
-                    styles.changeButtonText
-                  }
+                <TouchableOpacity
+                  style={styles.reservationHalfButton}
+                  onPress={abrirReserva}
                 >
-                  Cambiar punto de recogida
-                </Text>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={18}
+                    color="#111827"
+                  />
 
-              </TouchableOpacity>
+                  <Text style={styles.reservationHalfText}>
+                    Reservar taxi
+                  </Text>
+                </TouchableOpacity>
+
+
+                <View style={styles.reservationDivider} />
+
+
+                <TouchableOpacity
+                  style={styles.reservationHalfButton}
+                  onPress={abrirMisReservas}
+                >
+                  <Ionicons
+                    name="list-outline"
+                    size={18}
+                    color="#111827"
+                  />
+
+                  <Text style={styles.reservationHalfText}>
+                    Mis reservas
+                  </Text>
+                </TouchableOpacity>
+
+              </View>
 
 
               {/* TELÉFONO GUARDADO */}
@@ -1519,10 +1706,9 @@ export default function HomeScreen() {
 
         </View>
 
-
         {/* =================================================
-            MODAL TELÉFONO
-        ================================================= */}
+    MODAL TELÉFONO
+================================================= */}
 
         <Modal
 
@@ -1581,9 +1767,13 @@ export default function HomeScreen() {
                 }
               >
 
-                {pedirTaxiTrasTelefono
+                {accionTrasTelefono === "pedirTaxi"
                   ? "Introduce tu teléfono"
-                  : "Cambiar teléfono"}
+                  : accionTrasTelefono === "reservar"
+                    ? "Teléfono de contacto"
+                    : accionTrasTelefono === "misReservas"
+                      ? "Consulta tus reservas"
+                      : "Cambiar teléfono"}
 
               </Text>
 
@@ -1594,10 +1784,13 @@ export default function HomeScreen() {
                 }
               >
 
-                {pedirTaxiTrasTelefono
+                {accionTrasTelefono === "pedirTaxi"
                   ? "El taxista podrá utilizar este número para contactar contigo durante el servicio."
-                  : "Introduce el nuevo número que quieres utilizar en tus próximos servicios."}
-
+                  : accionTrasTelefono === "reservar"
+                    ? "Necesitamos un número para identificar tu reserva."
+                    : accionTrasTelefono === "misReservas"
+                      ? "Introduce tu número para consultar las reservas asociadas."
+                      : "Introduce el nuevo número que quieres utilizar en tus próximos servicios."}
               </Text>
 
 
@@ -1622,6 +1815,10 @@ export default function HomeScreen() {
                 autoFocus
 
                 returnKeyType="done"
+
+                onSubmitEditing={
+                  confirmarTelefono
+                }
 
               />
 
@@ -1668,9 +1865,13 @@ export default function HomeScreen() {
                     }
                   >
 
-                    {pedirTaxiTrasTelefono
+                    {accionTrasTelefono === "pedirTaxi"
                       ? "Continuar y pedir taxi"
-                      : "Guardar número"}
+                      : accionTrasTelefono === "reservar"
+                        ? "Continuar con la reserva"
+                        : accionTrasTelefono === "misReservas"
+                          ? "Ver mis reservas"
+                          : "Guardar número"}
 
                   </Text>
 
@@ -1850,61 +2051,6 @@ const styles = StyleSheet.create({
 
     color: "#64748b",
   },
-
-
-  addressBox: {
-    marginTop: 12,
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    gap: 12,
-
-    backgroundColor: "#f8fafc",
-
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-
-    borderRadius: 18,
-
-    padding: 14,
-  },
-
-
-  addressIcon: {
-    width: 38,
-    height: 38,
-
-    borderRadius: 19,
-
-    backgroundColor: "#e2e8f0",
-
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-
-  addressLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-
-    color: "#64748b",
-
-    textTransform: "uppercase",
-
-    marginBottom: 3,
-  },
-
-
-  addressValue: {
-    fontSize: 15,
-    fontWeight: "700",
-
-    color: "#0f172a",
-
-    lineHeight: 20,
-  },
-
 
   referenceBox: {
     marginTop: 10,
@@ -2177,4 +2323,121 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  reservationsRow: {
+    marginTop: 8,
+
+    minHeight: 50,
+
+    flexDirection: "row",
+
+    borderRadius: 17,
+
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+
+    backgroundColor: "#ffffff",
+
+    overflow: "hidden",
+  },
+
+  reservationHalfButton: {
+    flex: 1,
+
+    flexDirection: "row",
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 7,
+
+    paddingHorizontal: 8,
+  },
+
+  reservationDivider: {
+    width: 1,
+
+    marginVertical: 10,
+
+    backgroundColor: "#e2e8f0",
+  },
+
+  reservationHalfText: {
+    fontSize: 13,
+
+    color: "#111827",
+
+    fontWeight: "800",
+  },
+
+  pickupCard: {
+    marginTop: 12,
+
+    backgroundColor: "#f8fafc",
+
+    borderRadius: 18,
+
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+
+    padding: 13,
+  },
+
+  pickupTop: {
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    gap: 10,
+  },
+
+  iconCircle: {
+    width: 40,
+    height: 40,
+
+    borderRadius: 20,
+
+    backgroundColor: "#e2e8f0",
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pickupLabel: {
+    fontSize: 10,
+
+    fontWeight: "700",
+
+    color: "#64748b",
+
+    textTransform: "uppercase",
+  },
+
+  pickupAddress: {
+    marginTop: 2,
+
+    fontSize: 14,
+
+    lineHeight: 18,
+
+    fontWeight: "700",
+
+    color: "#111827",
+  },
+
+  changePickupSmall: {
+    minHeight: 36,
+
+    paddingHorizontal: 10,
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  changePickupSmallText: {
+    fontSize: 12,
+
+    fontWeight: "800",
+
+    color: "#111827",
+  },
 });

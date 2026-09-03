@@ -28,6 +28,9 @@ import {
   stopBackgroundLocationUpdates,
 } from "../lib/backgroundLocation";
 import ChatTaxistaScreen from "../screens/ChatTaxistaScreen";
+import ReservasTaxistaScreen
+  from "../screens/ReservasTaxistaScreen";
+
 
 export default function InicioScreen() {
   const { token, taxista, updateTaxista } = useAuth();
@@ -84,6 +87,16 @@ export default function InicioScreen() {
   const mensajesInicializadosRef = useRef(false);
   const ultimoMensajeClienteRef = useRef(null);
 
+const [
+  mostrarReservas,
+  setMostrarReservas,
+] = useState(false);
+
+const [
+  reservasPendientes,
+  setReservasPendientes,
+] = useState(0);
+
   const gpsDebeEstarActivo = estado !== "desconectado";
 
   const handleGpsPerdido = useCallback(() => {
@@ -130,6 +143,67 @@ export default function InicioScreen() {
     });
   }, [socket]);
 
+  const cargarReservasPendientes =
+  useCallback(async () => {
+
+    if (!token) {
+      return;
+    }
+
+    try {
+
+      const response =
+        await fetch(
+          `${API_BASE_URL}/mobile/reservas/disponibles`,
+          {
+            headers: {
+              Accept:
+                "application/json",
+
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          data?.error ||
+          "Error cargando reservas"
+        );
+
+      }
+
+
+      setReservasPendientes(
+        Array.isArray(
+          data?.reservas
+        )
+          ? data.reservas.length
+          : 0
+      );
+
+
+    } catch (error) {
+
+      console.log(
+        "Error reservas pendientes:",
+        error.message
+      );
+
+    }
+
+  }, [
+    token,
+    API_BASE_URL,
+  ]);
+
   const recuperarServicioActivo = useCallback(() => {
     if (!socket?.connected) return;
 
@@ -167,6 +241,27 @@ export default function InicioScreen() {
       }
     );
   }, [socket, setServicioActivo]);
+
+  useEffect(() => {
+
+  cargarReservasPendientes();
+
+
+  const interval =
+    setInterval(
+      cargarReservasPendientes,
+      15000
+    );
+
+
+  return () =>
+    clearInterval(
+      interval
+    );
+
+}, [
+  cargarReservasPendientes,
+]);
 
   useEffect(() => {
     cargarTaxisDisponibles();
@@ -424,6 +519,47 @@ export default function InicioScreen() {
       setCambiandoEstado(false);
     });
 
+    socket.on(
+  "reserva:nueva",
+  () => {
+
+    console.log(
+      "📅 Nueva reserva disponible"
+    );
+
+    cargarReservasPendientes();
+
+  }
+);
+
+
+socket.on(
+  "reserva:aceptada",
+  () => {
+
+    console.log(
+      "📅 Reserva aceptada"
+    );
+
+    cargarReservasPendientes();
+
+  }
+);
+
+
+socket.on(
+  "reserva:cancelada",
+  () => {
+
+    console.log(
+      "📅 Reserva cancelada"
+    );
+
+    cargarReservasPendientes();
+
+  }
+);
+
     socket.on("taxista:conectado", async (data) => {
       if (data?.taxista) {
         await updateTaxista(data.taxista);
@@ -650,6 +786,40 @@ export default function InicioScreen() {
       setEstado("desconectado");
     });
 
+    const onReservaCancelada = (
+  data
+) => {
+
+  console.log(
+    "🚫 Reserva cancelada:",
+    data
+  );
+
+
+  /*
+   * Actualizamos el punto rojo.
+   */
+  cargarReservasPendientes();
+
+
+  /*
+   * Avisamos inmediatamente.
+   */
+  Alert.alert(
+    "Reserva cancelada",
+    data?.direccionRecogida
+      ? `El cliente ha cancelado la reserva de ${data.direccionRecogida}.`
+      : "El cliente ha cancelado una reserva que tenías aceptada."
+  );
+
+};
+
+
+socket.on(
+  "reserva:cancelada",
+  onReservaCancelada
+);
+
     return () => {
       socket.off("connect");
       socket.off("connect_error");
@@ -666,6 +836,21 @@ export default function InicioScreen() {
       socket.off("taxista:salio_parada");
       socket.off("error:general");
       socket.off("taxista:gps_requerido");
+      socket.off(
+  "reserva:nueva"
+);
+
+socket.off(
+  "reserva:aceptada"
+);
+
+socket.off(
+  "reserva:cancelada"
+);
+socket.off(
+  "reserva:cancelada",
+  onReservaCancelada
+);
     };
   }, [socket, token, updateTaxista, taxista?.id, setServicioActivo]);
 
@@ -998,11 +1183,33 @@ export default function InicioScreen() {
     );
   }
 
+  if (
+  mostrarReservas
+) {
+
+  return (
+
+    <ReservasTaxistaScreen
+      onClose={() => {
+        setMostrarReservas(
+          false
+        );
+
+        cargarReservasPendientes();
+      }}
+    />
+
+  );
+
+}
+
   const llamadaTerminada =
     estadoLlamadaPlayer.isLoaded &&
     estadoLlamadaPlayer.duration > 0 &&
     estadoLlamadaPlayer.currentTime >=
     estadoLlamadaPlayer.duration - 0.5;
+
+
 
   return (
     <SafeAreaView style={styles.appShell} edges={["bottom"]}>
@@ -1275,6 +1482,80 @@ export default function InicioScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        <TouchableOpacity
+  style={styles.reservasButton}
+  onPress={() =>
+    setMostrarReservas(
+      true
+    )
+  }
+>
+
+  <View
+    style={
+      styles.reservasIconWrap
+    }
+  >
+
+    <Ionicons
+      name="calendar-outline"
+      size={21}
+      color="#111827"
+    />
+
+
+    {reservasPendientes > 0 && (
+
+      <View
+        style={
+          styles.reservasDot
+        }
+      />
+
+    )}
+
+  </View>
+
+
+  <View
+    style={{
+      flex: 1,
+    }}
+  >
+
+    <Text
+      style={
+        styles.reservasButtonTitle
+      }
+    >
+      Reservas
+    </Text>
+
+
+    <Text
+      style={
+        styles.reservasButtonSubtitle
+      }
+    >
+
+      {reservasPendientes > 0
+        ? `${reservasPendientes} disponible${reservasPendientes === 1 ? "" : "s"}`
+        : "No hay reservas disponibles"}
+
+    </Text>
+
+  </View>
+
+
+  <Ionicons
+    name="chevron-forward"
+    size={20}
+    color="#94a3b8"
+  />
+
+</TouchableOpacity>
+
       </ScrollView>
       <Modal
         visible={mostrarCerrarServicio}
@@ -1809,4 +2090,75 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#ef4444",
   },
+
+  reservasButton: {
+  marginTop: 12,
+
+  minHeight: 66,
+
+  paddingHorizontal: 14,
+
+  borderRadius: 17,
+
+  backgroundColor: "#fff",
+
+  borderWidth: 1,
+
+  borderColor: "#e2e8f0",
+
+  flexDirection: "row",
+
+  alignItems: "center",
+
+  gap: 11,
+},
+
+reservasIconWrap: {
+  width: 42,
+  height: 42,
+
+  borderRadius: 21,
+
+  backgroundColor: "#f1f5f9",
+
+  alignItems: "center",
+
+  justifyContent: "center",
+
+  position: "relative",
+},
+
+reservasDot: {
+  position: "absolute",
+
+  top: 1,
+  right: 1,
+
+  width: 10,
+  height: 10,
+
+  borderRadius: 5,
+
+  backgroundColor: "#ef4444",
+
+  borderWidth: 2,
+
+  borderColor: "#fff",
+},
+
+reservasButtonTitle: {
+  fontSize: 15,
+
+  fontWeight: "800",
+
+  color: "#111827",
+},
+
+reservasButtonSubtitle: {
+  marginTop: 2,
+
+  fontSize: 12,
+
+  color: "#64748b",
+},
 });
