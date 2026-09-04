@@ -504,52 +504,163 @@ export default function useTaxiLocation({
   ]);
 
   /*
-   * =====================================================
-   * HEARTBEAT GPS EN PRIMER PLANO
-   * =====================================================
-   *
-   * Aunque el taxi esté parado y Android
-   * no produzca una nueva posición por
-   * distanceInterval, reenviamos la última
-   * posición cada 10 segundos.
-   *
-   * Esto NO funciona ni se necesita en
-   * background. Allí manda la tarea nativa.
-   */
+ * =====================================================
+ * COMPROBAR GPS FÍSICO EN PRIMER PLANO
+ * =====================================================
+ *
+ * No reenviamos una ubicación antigua como heartbeat.
+ *
+ * Si el usuario apaga el GPS mientras la app está
+ * abierta, lo detectamos y desconectamos al taxista.
+ *
+ * En background, la vigilancia la hace:
+ *
+ * backgroundLocation.js
+ *        +
+ * watchdog del backend
+ */
 
   useEffect(() => {
     if (!activo) {
       return;
     }
 
+    let cancelado = false;
+    let gpsPerdidoNotificado = false;
+
+    const comprobarGps =
+      async () => {
+        try {
+          /*
+           * Esta comprobación solo es necesaria
+           * mientras la app está en primer plano.
+           *
+           * En background dejamos trabajar a
+           * expo-location + TaskManager.
+           */
+          if (
+            appStateRef.current !==
+            "active"
+          ) {
+            return;
+          }
+
+          const permiso =
+            await Location.getForegroundPermissionsAsync();
+
+          if (cancelado) {
+            return;
+          }
+
+          if (
+            permiso.status !==
+            "granted"
+          ) {
+            setGpsActivo(false);
+
+            setGpsError(
+              "Debes activar la ubicación para trabajar."
+            );
+
+            ultimaUbicacionRef.current =
+              null;
+
+            if (
+              !gpsPerdidoNotificado
+            ) {
+              gpsPerdidoNotificado =
+                true;
+
+              console.log(
+                "❌ Permiso GPS perdido"
+              );
+
+              onGpsPerdido?.();
+            }
+
+            return;
+          }
+
+          const enabled =
+            await Location.hasServicesEnabledAsync();
+
+          if (cancelado) {
+            return;
+          }
+
+          if (!enabled) {
+            setGpsActivo(false);
+
+            setGpsError(
+              "El GPS del dispositivo está desactivado."
+            );
+
+            /*
+             * Muy importante:
+             * eliminamos la última ubicación para
+             * que nunca pueda volver a enviarse
+             * como si fuera una posición nueva.
+             */
+            ultimaUbicacionRef.current =
+              null;
+
+            if (
+              !gpsPerdidoNotificado
+            ) {
+              gpsPerdidoNotificado =
+                true;
+
+              console.log(
+                "❌ GPS desactivado físicamente"
+              );
+
+              onGpsPerdido?.();
+            }
+
+            return;
+          }
+
+          /*
+           * El GPS vuelve a estar disponible.
+           *
+           * Permitimos que una pérdida posterior
+           * vuelva a ser notificada.
+           */
+          gpsPerdidoNotificado =
+            false;
+
+        } catch (error) {
+          console.log(
+            "❌ Error comprobando estado GPS:",
+            error?.message || error
+          );
+        }
+      };
+
+    /*
+     * Comprobación inmediata.
+     */
+    comprobarGps();
+
+    /*
+     * Y después cada 5 segundos.
+     */
     const interval =
-      setInterval(() => {
-        if (
-          appStateRef.current !==
-          "active"
-        ) {
-          return;
-        }
-
-        const ubicacion =
-          ultimaUbicacionRef.current;
-
-        if (!ubicacion) {
-          return;
-        }
-
-        enviarUbicacionSocket(
-          ubicacion.lat,
-          ubicacion.lng
-        );
-      }, 10000);
+      setInterval(
+        comprobarGps,
+        5000
+      );
 
     return () => {
-      clearInterval(interval);
+      cancelado = true;
+
+      clearInterval(
+        interval
+      );
     };
   }, [
     activo,
-    enviarUbicacionSocket,
+    onGpsPerdido,
   ]);
 
   /*

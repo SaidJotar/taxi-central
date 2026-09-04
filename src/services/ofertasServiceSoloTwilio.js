@@ -210,19 +210,37 @@ async function buscarTaxiEnParada(
     return null;
   }
 
+  for (
+    const taxista
+    of taxistas
+  ) {
+    const tieneOfertaPendiente =
+      await taxistaTieneOfertaPendiente(
+        taxista.id
+      );
+
+    if (tieneOfertaPendiente) {
+      continue;
+    }
+
+    console.log(
+      "🚕 Taxi seleccionado por parada:",
+      {
+        paradaId,
+        taxistaId:
+          taxista.id,
+      }
+    );
+
+    return taxista;
+  }
 
   console.log(
-    "🚕 Taxi seleccionado por parada:",
-    {
-      paradaId,
-
-      taxistaId:
-        taxistas[0].id,
-    }
+    "⏳ Todos los taxis de la parada tienen una oferta pendiente:",
+    paradaId
   );
 
-
-  return taxistas[0];
+  return null;
 
 }
 
@@ -901,6 +919,23 @@ async function buscarTaxiMasCercano(
       continue;
     }
 
+    const tieneOfertaPendiente =
+      await taxistaTieneOfertaPendiente(
+        taxista.id
+      );
+
+    if (tieneOfertaPendiente) {
+      console.log(
+        "⏭️ Saltando taxi con oferta pendiente:",
+        {
+          taxistaId:
+            taxista.id,
+          solicitudViajeId,
+        }
+      );
+
+      continue;
+    }
 
     /*
      * Como el taxi puede haberse movido desde que
@@ -973,6 +1008,54 @@ async function buscarTaxiMasCercano(
 
   return null;
 
+}
+
+
+/*
+ * =====================================================
+ * TAXISTA CON OFERTA ACTIVA
+ * =====================================================
+ *
+ * Un taxista solo puede tener UNA oferta pendiente
+ * simultáneamente, aunque existan varias solicitudes.
+ */
+
+async function taxistaTieneOfertaPendiente(
+  taxistaId
+) {
+  if (!taxistaId) {
+    return false;
+  }
+
+  const ofertaPendiente =
+    await prisma.ofertaSolicitud.findFirst({
+      where: {
+        taxistaId,
+        estado: "pendiente",
+      },
+
+      select: {
+        id: true,
+        solicitudViajeId: true,
+      },
+    });
+
+  if (ofertaPendiente) {
+    console.log(
+      "⏳ Taxista ya tiene otra oferta pendiente:",
+      {
+        taxistaId,
+        ofertaId:
+          ofertaPendiente.id,
+        solicitudViajeId:
+          ofertaPendiente.solicitudViajeId,
+      }
+    );
+
+    return true;
+  }
+
+  return false;
 }
 
 
@@ -1417,6 +1500,25 @@ async function emitirOfertaATaxista({
   solicitud,
   taxista,
 }) {
+
+  const tieneOfertaPendiente =
+    await taxistaTieneOfertaPendiente(
+      taxista.id
+    );
+
+  if (tieneOfertaPendiente) {
+    console.log(
+      "⛔ Oferta NO emitida. Taxista ocupado con otra oferta:",
+      {
+        taxistaId:
+          taxista.id,
+        solicitudViajeId:
+          solicitud.id,
+      }
+    );
+
+    return null;
+  }
 
   const oferta =
     await prisma.ofertaSolicitud.create({
@@ -2011,17 +2113,44 @@ async function programarSiguienteOferta(
 
   const oferta =
     await emitirOfertaATaxista({
-
       solicitud,
-
       taxista:
         siguienteTaxista,
-
     });
 
+  if (!oferta) {
+    console.log(
+      "🔄 Taxista ocupado por otra oferta. Buscando otro:",
+      {
+        solicitudViajeId,
+        taxistaId:
+          siguienteTaxista.id,
+      }
+    );
+
+    /*
+     * Devolvemos temporalmente la solicitud
+     * a pendiente para que pueda seguir
+     * buscando otro taxista.
+     */
+    await prisma.solicitudViaje.update({
+      where: {
+        id:
+          solicitudViajeId,
+      },
+
+      data: {
+        estado:
+          "pendiente",
+      },
+    });
+
+    return programarSiguienteOferta(
+      solicitudViajeId
+    );
+  }
 
   return oferta;
-
 }
 
 
