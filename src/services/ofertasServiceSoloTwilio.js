@@ -91,6 +91,33 @@ function limpiarRankingTaxistas(
 
 }
 
+async function taxistaTieneOfertaPendiente(
+  taxistaId
+) {
+
+  const ofertaPendiente =
+    await prisma.ofertaSolicitud.findFirst({
+
+      where: {
+
+        taxistaId,
+
+        estado:
+          "pendiente",
+
+      },
+
+      select: {
+        id:
+          true,
+      },
+
+    });
+
+
+  return !!ofertaPendiente;
+}
+
 
 /*
  * =====================================================
@@ -180,6 +207,10 @@ async function buscarTaxiEnParada(
           "disponible",
 
         paradaId,
+
+        enParadaDesde: {
+          not: null,
+        },
 
         id: {
           notIn:
@@ -273,14 +304,10 @@ async function buscarTaxiMasCercano(
 ) {
 
   if (
-    typeof lat !==
-    "number" ||
-    typeof lng !==
-    "number"
+    typeof lat !== "number" ||
+    typeof lng !== "number"
   ) {
-
     return null;
-
   }
 
 
@@ -291,13 +318,26 @@ async function buscarTaxiMasCercano(
    *
    * IMPORTANTE:
    *
-   * No aplicamos taxistasExcluidos aquí al construir
-   * la lista completa.
+   * Hay dos tipos de candidatos:
    *
-   * De esta forma el ranking de la solicitud puede
-   * mantenerse estable.
+   * 1. TAXI LIBRE
+   *    paradaId === null
    *
-   * Los excluidos se saltan posteriormente.
+   *    Compite individualmente utilizando su GPS.
+   *
+   * 2. PARADA
+   *    paradaId !== null
+   *
+   *    La parada compite como UNA SOLA unidad,
+   *    utilizando las coordenadas de la parada.
+   *
+   *    Si la parada resulta elegida,
+   *    se ofrece siempre al primero de la cola.
+   *
+   * De esta forma NUNCA un segundo taxi de una
+   * parada puede adelantarse al primero porque
+   * su móvil esté unos metros más cerca.
+   * ===================================================
    */
 
   const taxistas =
@@ -309,13 +349,11 @@ async function buscarTaxiMasCercano(
           "disponible",
 
         lat: {
-          not:
-            null,
+          not: null,
         },
 
         lng: {
-          not:
-            null,
+          not: null,
         },
 
         vehiculo: {
@@ -331,11 +369,13 @@ async function buscarTaxiMasCercano(
       },
 
       include: {
+
         vehiculo:
           true,
 
         parada:
           true,
+
       },
 
     });
@@ -356,6 +396,28 @@ async function buscarTaxiMasCercano(
    * ===================================================
    * ¿TENEMOS RANKING YA CALCULADO?
    * ===================================================
+   *
+   * El ranking ya NO contiene solamente IDs
+   * de taxistas.
+   *
+   * Puede contener:
+   *
+   * {
+   *   tipo: "taxista",
+   *   taxistaId: "..."
+   * }
+   *
+   * o:
+   *
+   * {
+   *   tipo: "parada",
+   *   paradaId: "..."
+   * }
+   *
+   * Esto es fundamental:
+   *
+   * una parada permanece en la misma posición
+   * del ranking aunque cambie el primero de cola.
    */
 
   let ranking =
@@ -373,88 +435,259 @@ async function buscarTaxiMasCercano(
   if (!ranking) {
 
     /*
-     * -------------------------------------------------
-     * DISTANCIA DIRECTA
-     * -------------------------------------------------
+     * =================================================
+     * TAXIS LIBRES
+     * =================================================
+     */
+
+    const taxisLibres =
+      taxistas.filter(
+        (taxista) =>
+          !taxista.paradaId
+      );
+
+
+    /*
+     * =================================================
+     * PARADAS CON TAXIS
+     * =================================================
      *
-     * Esto es cálculo local.
-     *
-     * NO consume Google.
+     * Cada parada aparecerá UNA SOLA VEZ.
+     */
+
+    const paradasMap =
+      new Map();
+
+
+    for (
+      const taxista
+      of taxistas
+    ) {
+
+      if (
+        !taxista.paradaId ||
+        !taxista.parada
+      ) {
+        continue;
+      }
+
+
+      /*
+       * Solo necesitamos guardar una vez
+       * cada parada.
+       */
+
+      if (
+        !paradasMap.has(
+          taxista.paradaId
+        )
+      ) {
+
+        paradasMap.set(
+          taxista.paradaId,
+          taxista.parada
+        );
+
+      }
+
+    }
+
+
+    /*
+     * =================================================
+     * CONSTRUIR CANDIDATOS
+     * =================================================
      */
 
     const candidatos =
-      taxistas
-
-        .map(
-          (taxista) => {
-
-            const distanciaDirecta =
-              distanciaMetros(
-
-                lat,
-
-                lng,
-
-                Number(
-                  taxista.lat
-                ),
-
-                Number(
-                  taxista.lng
-                )
-
-              );
+      [];
 
 
-            return {
+    /*
+     * -------------------------------------------------
+     * TAXIS LIBRES
+     * -------------------------------------------------
+     */
 
-              taxista,
+    for (
+      const taxista
+      of taxisLibres
+    ) {
 
-              distanciaDirecta,
+      const distanciaDirecta =
+        distanciaMetros(
 
-            };
+          lat,
+          lng,
 
-          }
-        )
+          Number(
+            taxista.lat
+          ),
 
+          Number(
+            taxista.lng
+          )
 
-        /*
-         * Descartamos taxis demasiado alejados.
-         */
-
-        .filter(
-          (item) =>
-
-            Number.isFinite(
-              item.distanciaDirecta
-            ) &&
-
-            item.distanciaDirecta <=
-            DISTANCIA_MAXIMA_OFERTA_METROS
-        )
-
-
-        /*
-         * Primero ordenamos gratuitamente
-         * por distancia directa.
-         */
-
-        .sort(
-          (a, b) =>
-
-            a.distanciaDirecta -
-            b.distanciaDirecta
         );
+
+
+      if (
+        !Number.isFinite(
+          distanciaDirecta
+        ) ||
+        distanciaDirecta >
+        DISTANCIA_MAXIMA_OFERTA_METROS
+      ) {
+        continue;
+      }
+
+
+      candidatos.push({
+
+        tipo:
+          "taxista",
+
+        taxistaId:
+          taxista.id,
+
+        paradaId:
+          null,
+
+        lat:
+          Number(
+            taxista.lat
+          ),
+
+        lng:
+          Number(
+            taxista.lng
+          ),
+
+        distanciaDirecta,
+
+      });
+
+    }
+
+
+    /*
+     * -------------------------------------------------
+     * PARADAS
+     * -------------------------------------------------
+     *
+     * IMPORTANTE:
+     *
+     * utilizamos Parada.lat / Parada.lng.
+     *
+     * NO utilizamos el GPS de ninguno de
+     * los taxistas que estén haciendo cola.
+     */
+
+    for (
+      const [
+        paradaId,
+        parada
+      ]
+      of paradasMap.entries()
+    ) {
+
+      if (
+        typeof parada.lat !==
+        "number" ||
+        typeof parada.lng !==
+        "number"
+      ) {
+        continue;
+      }
+
+
+      /*
+       * Antes de incluir la parada,
+       * comprobamos que exista al menos
+       * un taxista elegible en su cola.
+       *
+       * Esto además respeta taxistasExcluidos.
+       */
+
+
+      const distanciaDirecta =
+        distanciaMetros(
+
+          lat,
+          lng,
+
+          Number(
+            parada.lat
+          ),
+
+          Number(
+            parada.lng
+          )
+
+        );
+
+
+      if (
+        !Number.isFinite(
+          distanciaDirecta
+        ) ||
+        distanciaDirecta >
+        DISTANCIA_MAXIMA_OFERTA_METROS
+      ) {
+        continue;
+      }
+
+
+      candidatos.push({
+
+        tipo:
+          "parada",
+
+        taxistaId:
+          null,
+
+        paradaId,
+
+        paradaNombre:
+          parada.nombre,
+
+        lat:
+          Number(
+            parada.lat
+          ),
+
+        lng:
+          Number(
+            parada.lng
+          ),
+
+        distanciaDirecta,
+
+      });
+
+    }
+
+
+    /*
+     * =================================================
+     * ORDEN INICIAL HAVERSINE
+     * =================================================
+     */
+
+    candidatos.sort(
+      (a, b) =>
+        a.distanciaDirecta -
+        b.distanciaDirecta
+    );
 
 
     if (!candidatos.length) {
 
       console.log(
-        "🚫 No hay taxis dentro del radio máximo"
+        "🚫 No hay taxis ni paradas dentro del radio máximo"
       );
 
       return null;
-
     }
 
 
@@ -469,12 +702,23 @@ async function buscarTaxiMasCercano(
           posicion:
             index + 1,
 
+          tipo:
+            candidato.tipo,
+
           taxistaId:
-            candidato.taxista.id,
+            candidato.taxistaId,
+
+          paradaId:
+            candidato.paradaId,
+
+          paradaNombre:
+            candidato.paradaNombre ||
+            null,
 
           distanciaDirecta:
             Math.round(
-              candidato.distanciaDirecta
+              candidato
+                .distanciaDirecta
             ),
 
         })
@@ -483,9 +727,18 @@ async function buscarTaxiMasCercano(
 
 
     /*
-     * -------------------------------------------------
-     * SOLO LOS DOS PRIMEROS
-     * -------------------------------------------------
+     * =================================================
+     * GOOGLE ROUTES
+     * =================================================
+     *
+     * Igual que antes:
+     *
+     * máximo los 2 primeros candidatos.
+     *
+     * Pero ahora un candidato puede ser:
+     *
+     * - taxi libre
+     * - parada
      */
 
     const candidatosGoogle =
@@ -499,17 +752,6 @@ async function buscarTaxiMasCercano(
       [];
 
 
-    /*
-     * =================================================
-     * GOOGLE ROUTES
-     * =================================================
-     *
-     * Como candidatosGoogle tiene como máximo
-     * 2 elementos:
-     *
-     * aquí nunca habrá más de 2 peticiones.
-     */
-
     for (
       const candidato
       of candidatosGoogle
@@ -520,18 +762,28 @@ async function buscarTaxiMasCercano(
         console.log(
           "🛣️ Google Routes candidato:",
           {
+
             solicitudViajeId,
 
+            tipo:
+              candidato.tipo,
+
             taxistaId:
-              candidato
-                .taxista
-                .id,
+              candidato.taxistaId,
+
+            paradaId:
+              candidato.paradaId,
+
+            paradaNombre:
+              candidato.paradaNombre ||
+              null,
 
             distanciaDirecta:
               Math.round(
                 candidato
                   .distanciaDirecta
               ),
+
           }
         );
 
@@ -540,18 +792,10 @@ async function buscarTaxiMasCercano(
           await calcularRutaTaxiCliente({
 
             origenLat:
-              Number(
-                candidato
-                  .taxista
-                  .lat
-              ),
+              candidato.lat,
 
             origenLng:
-              Number(
-                candidato
-                  .taxista
-                  .lng
-              ),
+              candidato.lng,
 
             destinoLat:
               lat,
@@ -564,10 +808,18 @@ async function buscarTaxiMasCercano(
 
         resultadosGoogle.push({
 
+          tipo:
+            candidato.tipo,
+
           taxistaId:
-            candidato
-              .taxista
-              .id,
+            candidato.taxistaId,
+
+          paradaId:
+            candidato.paradaId,
+
+          paradaNombre:
+            candidato.paradaNombre ||
+            null,
 
           distanciaDirecta:
             candidato
@@ -594,10 +846,19 @@ async function buscarTaxiMasCercano(
         console.log(
           "✅ Ruta real candidato:",
           {
+
+            tipo:
+              candidato.tipo,
+
             taxistaId:
-              candidato
-                .taxista
-                .id,
+              candidato.taxistaId,
+
+            paradaId:
+              candidato.paradaId,
+
+            paradaNombre:
+              candidato.paradaNombre ||
+              null,
 
             etaMinutos:
               ruta
@@ -606,45 +867,48 @@ async function buscarTaxiMasCercano(
             distanciaRuta:
               ruta
                 .distanciaMetros,
+
           }
         );
-
 
       } catch (
       error
       ) {
 
-        /*
-         * MUY IMPORTANTE:
-         *
-         * Si Google falla NO repetimos.
-         *
-         * Esa petición ya ha contado como intento.
-         *
-         * Utilizamos la distancia directa
-         * como fallback.
-         */
-
         console.error(
           "⚠️ Google Routes falló para candidato:",
           {
+
+            tipo:
+              candidato.tipo,
+
             taxistaId:
-              candidato
-                .taxista
-                .id,
+              candidato.taxistaId,
+
+            paradaId:
+              candidato.paradaId,
 
             error:
               error.message,
+
           }
         );
 
 
         resultadosGoogle.push({
 
+          tipo:
+            candidato.tipo,
+
           taxistaId:
-            candidato
-              .taxista
-              .id,
+            candidato.taxistaId,
+
+          paradaId:
+            candidato.paradaId,
+
+          paradaNombre:
+            candidato.paradaNombre ||
+            null,
 
           distanciaDirecta:
             candidato
@@ -668,15 +932,13 @@ async function buscarTaxiMasCercano(
 
     /*
      * =================================================
-     * ORDENAR LOS DOS CANDIDATOS
+     * ORDEN GOOGLE
      * =================================================
      *
-     * Prioridad:
-     *
-     * 1. ruta Google correcta
+     * 1. Google correcto
      * 2. menor ETA
-     * 3. si mismo ETA, menor distancia real
-     * 4. si Google falla, Haversine
+     * 3. menor distancia real
+     * 4. Haversine como fallback
      */
 
     resultadosGoogle.sort(
@@ -685,17 +947,11 @@ async function buscarTaxiMasCercano(
         b
       ) => {
 
-        /*
-         * Uno tiene Google y otro no.
-         */
-
         if (
           a.googleOk &&
           !b.googleOk
         ) {
-
           return -1;
-
         }
 
 
@@ -703,15 +959,9 @@ async function buscarTaxiMasCercano(
           !a.googleOk &&
           b.googleOk
         ) {
-
           return 1;
-
         }
 
-
-        /*
-         * Los dos tienen ruta Google.
-         */
 
         if (
           a.googleOk &&
@@ -730,11 +980,6 @@ async function buscarTaxiMasCercano(
 
           }
 
-
-          /*
-           * Si los dos tienen mismo minuto estimado,
-           * elegimos la ruta real más corta.
-           */
 
           if (
             Number.isFinite(
@@ -755,12 +1000,6 @@ async function buscarTaxiMasCercano(
         }
 
 
-        /*
-         * Google falló en ambos.
-         *
-         * Volvemos a Haversine.
-         */
-
         return (
           a.distanciaDirecta -
           b.distanciaDirecta
@@ -772,37 +1011,54 @@ async function buscarTaxiMasCercano(
 
     /*
      * =================================================
-     * RESTO DE TAXIS
+     * RESTO DE CANDIDATOS
      * =================================================
-     *
-     * Para ellos NO hacemos ninguna llamada Google.
-     *
-     * Siguen ordenados por Haversine.
      */
 
-    const idsConsultadosGoogle =
+    const clavesGoogle =
       new Set(
-
         candidatosGoogle.map(
-          (candidato) =>
+          (candidato) => {
 
-            candidato
-              .taxista
-              .id
+            if (
+              candidato.tipo ===
+              "parada"
+            ) {
+
+              return (
+                `parada:${candidato.paradaId}`
+              );
+
+            }
+
+
+            return (
+              `taxista:${candidato.taxistaId}`
+            );
+
+          }
         )
-
       );
 
 
-    const restoTaxistas =
+    const restoCandidatos =
       candidatos.filter(
-        (candidato) =>
+        (candidato) => {
 
-          !idsConsultadosGoogle.has(
-            candidato
-              .taxista
-              .id
-          )
+          const clave =
+            candidato.tipo ===
+              "parada"
+              ? `parada:${candidato.paradaId}`
+              : `taxista:${candidato.taxistaId}`;
+
+
+          return (
+            !clavesGoogle.has(
+              clave
+            )
+          );
+
+        }
       );
 
 
@@ -810,41 +1066,47 @@ async function buscarTaxiMasCercano(
      * =================================================
      * RANKING FINAL
      * =================================================
+     *
+     * Guardamos TIPO + ID.
+     *
+     * No guardamos el taxista concreto
+     * cuando se trata de una parada.
      */
 
     ranking = [
 
-      /*
-       * Los 2 candidatos comparados
-       * por ruta real.
-       */
-
       ...resultadosGoogle.map(
-        (resultado) =>
+        (resultado) => ({
 
-          resultado
-            .taxistaId
+          tipo:
+            resultado.tipo,
+
+          taxistaId:
+            resultado.taxistaId,
+
+          paradaId:
+            resultado.paradaId,
+
+        })
       ),
 
+      ...restoCandidatos.map(
+        (candidato) => ({
 
-      /*
-       * Resto por Haversine.
-       */
+          tipo:
+            candidato.tipo,
 
-      ...restoTaxistas.map(
-        (candidato) =>
+          taxistaId:
+            candidato.taxistaId,
 
-          candidato
-            .taxista
-            .id
+          paradaId:
+            candidato.paradaId,
+
+        })
       ),
 
     ];
 
-
-    /*
-     * Guardamos el ranking.
-     */
 
     rankingTaxistasPorSolicitud.set(
       solicitudViajeId,
@@ -855,6 +1117,7 @@ async function buscarTaxiMasCercano(
     console.log(
       "🏁 Ranking final guardado:",
       {
+
         solicitudViajeId,
 
         ranking,
@@ -864,6 +1127,7 @@ async function buscarTaxiMasCercano(
 
         comparacionGoogle:
           resultadosGoogle,
+
       }
     );
 
@@ -872,192 +1136,225 @@ async function buscarTaxiMasCercano(
 
   /*
    * ===================================================
-   * SIGUIENTE TAXISTA DEL RANKING
+   * RECORRER RANKING
    * ===================================================
    */
 
   for (
-    const taxistaId
+    const candidatoRanking
     of ranking
   ) {
 
     /*
-     * Ya recibió una oferta en esta vuelta.
+     * =================================================
+     * CANDIDATO = TAXISTA LIBRE
+     * =================================================
      */
 
     if (
-      taxistasExcluidos.includes(
-        taxistaId
-      )
+      candidatoRanking.tipo ===
+      "taxista"
     ) {
 
-      continue;
+      const taxistaId =
+        candidatoRanking
+          .taxistaId;
 
-    }
 
-
-    /*
-     * Comprobamos que SIGUE disponible.
-     *
-     * taxistas contiene únicamente:
-     *
-     * - disponible
-     * - vehículo
-     * - GPS reciente
-     */
-
-    const taxista =
-      taxistas.find(
-        (item) =>
-
-          item.id ===
+      if (
+        !taxistaId ||
+        taxistasExcluidos.includes(
           taxistaId
-      );
+        )
+      ) {
+        continue;
+      }
 
 
-    if (!taxista) {
-      continue;
-    }
+      /*
+       * Tiene que seguir disponible,
+       * tener GPS reciente y,
+       * MUY IMPORTANTE,
+       * seguir FUERA de una parada.
+       */
 
-    const tieneOfertaPendiente =
-      await taxistaTieneOfertaPendiente(
-        taxista.id
-      );
+      const taxista =
+        taxistas.find(
+          (item) =>
+            item.id ===
+            taxistaId &&
+            !item.paradaId
+        );
 
-    if (tieneOfertaPendiente) {
+
+      if (!taxista) {
+        continue;
+      }
+
+      const tieneOfertaPendiente =
+        await taxistaTieneOfertaPendiente(
+          taxista.id
+        );
+
+      if (tieneOfertaPendiente) {
+
+        console.log(
+          "⏳ Taxi libre omitido porque ya tiene otra oferta pendiente:",
+          taxista.id
+        );
+
+        continue;
+      }
+
+
+      const distanciaActual =
+        distanciaMetros(
+
+          lat,
+          lng,
+
+          Number(
+            taxista.lat
+          ),
+
+          Number(
+            taxista.lng
+          )
+
+        );
+
+
+      if (
+        !Number.isFinite(
+          distanciaActual
+        ) ||
+        distanciaActual >
+        DISTANCIA_MAXIMA_OFERTA_METROS
+      ) {
+        continue;
+      }
+
+
       console.log(
-        "⏭️ Saltando taxi con oferta pendiente:",
+        "🚕 Taxi libre seleccionado del ranking:",
         {
+
+          solicitudViajeId,
+
           taxistaId:
             taxista.id,
-          solicitudViajeId,
+
+          posicionRanking:
+            ranking.indexOf(
+              candidatoRanking
+            ) + 1,
+
+          distanciaDirectaActual:
+            Math.round(
+              distanciaActual
+            ),
+
         }
       );
 
-      continue;
+
+      return taxista;
+
     }
 
+
     /*
-     * Como el taxi puede haberse movido desde que
-     * calculamos inicialmente el ranking,
-     * comprobamos también que siga dentro del
-     * radio máximo.
+     * =================================================
+     * CANDIDATO = PARADA
+     * =================================================
+     *
+     * NO utilizamos el taxi que estuviera primero
+     * cuando se creó el ranking.
+     *
+     * Consultamos AHORA la cola.
+     *
+     * Así:
+     *
+     * vuelta 1:
+     *
+     *   Taxi A
+     *   Taxi B
+     *
+     * se ofrece a A.
+     *
+     * Si A expira/rechaza:
+     *
+     * taxistasExcluidos = [A]
+     *
+     * la misma parada sigue ocupando su lugar
+     * en el ranking pero ahora devuelve B.
      */
 
-    const distanciaActual =
-      distanciaMetros(
+    if (
+      candidatoRanking.tipo ===
+      "parada"
+    ) {
 
-        lat,
+      const paradaId =
+        candidatoRanking
+          .paradaId;
 
-        lng,
 
-        Number(
-          taxista.lat
-        ),
+      if (!paradaId) {
+        continue;
+      }
 
-        Number(
-          taxista.lng
-        )
 
+      const taxiParada =
+        await buscarTaxiEnParada(
+          paradaId,
+          taxistasExcluidos
+        );
+
+
+      if (!taxiParada) {
+        continue;
+      }
+
+
+      console.log(
+        "🚏 Parada seleccionada del ranking:",
+        {
+
+          solicitudViajeId,
+
+          paradaId,
+
+          taxistaId:
+            taxiParada.id,
+
+          posicionRanking:
+            ranking.indexOf(
+              candidatoRanking
+            ) + 1,
+
+          enParadaDesde:
+            taxiParada
+              .enParadaDesde,
+
+        }
       );
 
 
-    if (
-      !Number.isFinite(
-        distanciaActual
-      ) ||
-      distanciaActual >
-      DISTANCIA_MAXIMA_OFERTA_METROS
-    ) {
-
-      continue;
+      return taxiParada;
 
     }
-
-
-    console.log(
-      "🚕 Taxi seleccionado del ranking:",
-      {
-        solicitudViajeId,
-
-        taxistaId:
-          taxista.id,
-
-        posicionRanking:
-          ranking.indexOf(
-            taxista.id
-          ) + 1,
-
-        distanciaDirectaActual:
-          Math.round(
-            distanciaActual
-          ),
-      }
-    );
-
-
-    return taxista;
 
   }
 
 
   /*
-   * Ninguno del ranking está disponible
-   * para esta vuelta.
+   * Ningún taxi / parada del ranking
+   * es elegible actualmente.
    */
 
   return null;
-
 }
-
-
-/*
- * =====================================================
- * TAXISTA CON OFERTA ACTIVA
- * =====================================================
- *
- * Un taxista solo puede tener UNA oferta pendiente
- * simultáneamente, aunque existan varias solicitudes.
- */
-
-async function taxistaTieneOfertaPendiente(
-  taxistaId
-) {
-  if (!taxistaId) {
-    return false;
-  }
-
-  const ofertaPendiente =
-    await prisma.ofertaSolicitud.findFirst({
-      where: {
-        taxistaId,
-        estado: "pendiente",
-      },
-
-      select: {
-        id: true,
-        solicitudViajeId: true,
-      },
-    });
-
-  if (ofertaPendiente) {
-    console.log(
-      "⏳ Taxista ya tiene otra oferta pendiente:",
-      {
-        taxistaId,
-        ofertaId:
-          ofertaPendiente.id,
-        solicitudViajeId:
-          ofertaPendiente.solicitudViajeId,
-      }
-    );
-
-    return true;
-  }
-
-  return false;
-}
-
 
 /*
  * =====================================================
