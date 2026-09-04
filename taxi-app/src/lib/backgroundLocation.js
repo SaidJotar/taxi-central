@@ -144,10 +144,14 @@ export async function startBackgroundLocationUpdates() {
         BACKGROUND_LOCATION_TASK
       );
 
+    console.log(
+      "🔎 Background location ya iniciada:",
+      started
+    );
+
     if (started) {
       return true;
     }
-
     await Location.startLocationUpdatesAsync(
       BACKGROUND_LOCATION_TASK,
       {
@@ -158,7 +162,10 @@ export async function startBackgroundLocationUpdates() {
           10000,
 
         distanceInterval:
-          10,
+          0,
+
+        pausesUpdatesAutomatically:
+          false,
 
         showsBackgroundLocationIndicator:
           true,
@@ -168,7 +175,7 @@ export async function startBackgroundLocationUpdates() {
             "Taxi activo",
 
           notificationBody:
-            "Compartiendo ubicación mientras estás disponible",
+            "Compartiendo ubicación mientras estás activo",
 
           notificationColor:
             "#2563eb",
@@ -176,12 +183,17 @@ export async function startBackgroundLocationUpdates() {
       }
     );
 
+    const confirmado =
+      await Location.hasStartedLocationUpdatesAsync(
+        BACKGROUND_LOCATION_TASK
+      );
+
     console.log(
-      "✅ Ubicación background iniciada"
+      "✅ Background location registrada:",
+      confirmado
     );
 
-    return true;
-
+    return confirmado;
   } catch (error) {
     console.log(
       "❌ Error iniciando ubicación background:",

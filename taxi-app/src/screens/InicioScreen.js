@@ -113,6 +113,64 @@ export default function InicioScreen() {
 
   const gpsDebeEstarActivo = estado !== "desconectado";
 
+  useEffect(() => {
+    let cancelado = false;
+
+    const actualizarBackgroundGps =
+      async () => {
+        try {
+          if (!token) {
+            return;
+          }
+
+          if (
+            estado ===
+            "desconectado"
+          ) {
+            console.log(
+              "🛑 Estado desconectado: detenemos GPS background"
+            );
+
+            await stopBackgroundLocationUpdates();
+
+            return;
+          }
+
+          console.log(
+            "🟢 Estado activo:",
+            estado,
+            "-> comprobando GPS background"
+          );
+
+          const iniciado =
+            await startBackgroundLocationUpdates();
+
+          if (cancelado) {
+            return;
+          }
+
+          console.log(
+            "📍 Resultado startBackgroundLocationUpdates:",
+            iniciado
+          );
+        } catch (error) {
+          console.log(
+            "❌ Error controlando GPS background:",
+            error?.message || error
+          );
+        }
+      };
+
+    actualizarBackgroundGps();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [
+    estado,
+    token,
+  ]);
+
   const handleGpsPerdido = useCallback(() => {
     socket.emit("taxista:cambiar_estado", { estado: "desconectado" });
     setEstado("desconectado");
@@ -712,14 +770,6 @@ export default function InicioScreen() {
         setParadaActual(data.taxista.parada || null);
         setCambiandoEstado(false);
         setAccionPendiente("");
-
-        if (data.taxista.estado === "desconectado") {
-          await stopBackgroundLocationUpdates();
-        }
-
-        if (data.taxista.estado === "disponible") {
-          await startBackgroundLocationUpdates();
-        }
       }
     });
 
