@@ -1090,31 +1090,52 @@ export default function RideScreen() {
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.primaryButton, enviandoValoracion && { opacity: 0.7 }]}
+                            style={[
+                                styles.primaryButton,
+                                enviandoValoracion && {
+                                    opacity: 0.7,
+                                },
+                            ]}
                             disabled={enviandoValoracion}
                             onPress={async () => {
                                 try {
                                     if (!rating) {
-                                        Alert.alert("Valoración", "Selecciona una puntuación");
+                                        Alert.alert(
+                                            "Valoración",
+                                            "Selecciona una puntuación"
+                                        );
                                         return;
                                     }
 
                                     setEnviandoValoracion(true);
 
-                                    await api.valorarServicio(solicitud.id, {
-                                        rating,
-                                        comentario,
-                                    });
-                                    
+                                    await api.valorarServicio(
+                                        solicitud.id,
+                                        {
+                                            rating,
+                                            comentario,
+                                        }
+                                    );
+
+                                    detenerPolling();
+
+                                    volverInicioLimpio();
+
                                 } catch (error) {
-                                    Alert.alert("Error", error.message || "No se pudo guardar la valoración");
+                                    Alert.alert(
+                                        "Error",
+                                        error.message ||
+                                        "No se pudo guardar la valoración"
+                                    );
                                 } finally {
                                     setEnviandoValoracion(false);
                                 }
                             }}
                         >
                             <Text style={styles.primaryButtonText}>
-                                {enviandoValoracion ? "Enviando..." : "Enviar valoración"}
+                                {enviandoValoracion
+                                    ? "Enviando..."
+                                    : "Enviar valoración"}
                             </Text>
                         </TouchableOpacity>
                     </>

@@ -164,32 +164,44 @@ function AppContent() {
             backgroundColor: COLORS.bg,
           },
           tabBarStyle: {
-            height: 60 + insets.bottom,
-            paddingTop: 8,
-            paddingBottom: Math.max(insets.bottom, 8),
+            height: 58 + insets.bottom,
+            paddingTop: 6,
+            paddingBottom: Math.max(insets.bottom, 6),
             borderTopWidth: 1,
-            borderTopColor: COLORS.border,
-            backgroundColor: COLORS.card,
+            borderTopColor: "#e2e8f0",
+            backgroundColor: "#ffffff",
           },
+
           tabBarItemStyle: {
-            paddingVertical: 4,
+            paddingVertical: 3,
+          },
+
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: "700",
+            marginBottom: 1,
           },
           tabBarActiveTintColor: COLORS.primary,
           tabBarInactiveTintColor: COLORS.textSoft,
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: "700",
-            marginBottom: 2,
-          },
+
           headerRight: () => <HeaderRightActions />,
         }}
       >
+
         <Tabs.Screen
           name="index"
           options={{
             title: "Inicio",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={
+                  focused
+                    ? "home"
+                    : "home-outline"
+                }
+                size={size}
+                color={color}
+              />
             ),
           }}
         />
@@ -198,8 +210,16 @@ function AppContent() {
           name="paradas"
           options={{
             title: "Paradas",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="location-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={
+                  focused
+                    ? "location"
+                    : "location-outline"
+                }
+                size={size}
+                color={color}
+              />
             ),
           }}
         />
@@ -208,8 +228,16 @@ function AppContent() {
           name="servicios"
           options={{
             title: "Servicios",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="car-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={
+                  focused
+                    ? "car"
+                    : "car-outline"
+                }
+                size={size}
+                color={color}
+              />
             ),
           }}
         />
@@ -218,8 +246,16 @@ function AppContent() {
           name="objetos"
           options={{
             title: "Objetos",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="cube-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={
+                  focused
+                    ? "cube"
+                    : "cube-outline"
+                }
+                size={size}
+                color={color}
+              />
             ),
           }}
         />
@@ -232,7 +268,14 @@ function AppContent() {
           }}
         />
 
-        <Tabs.Screen name="objetos-perdidos" options={{ href: null, headerShown: false }} />
+        <Tabs.Screen
+          name="objetos-perdidos"
+          options={{
+            href: null,
+            headerShown: false,
+          }}
+        />
+
       </Tabs>
 
       <GlobalOfertaLayer />

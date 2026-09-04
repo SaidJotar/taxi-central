@@ -5,6 +5,138 @@ const authTaxista = require("../routes/authTaxista");
 
 const router = express.Router();
 
+/*
+ * =====================================================
+ * UBICACIÓN BACKGROUND DEL TAXISTA
+ * =====================================================
+ */
+
+router.post(
+  "/ubicacion-background",
+  authTaxista,
+  async (req, res) => {
+    try {
+      const taxistaId =
+        req.taxistaAuth
+          ?.taxistaId;
+
+      const {
+        lat,
+        lng,
+      } = req.body || {};
+
+      if (!taxistaId) {
+        return res
+          .status(401)
+          .json({
+            ok: false,
+            error:
+              "No autorizado",
+          });
+      }
+
+      if (
+        typeof lat !== "number" ||
+        typeof lng !== "number" ||
+        Number.isNaN(lat) ||
+        Number.isNaN(lng)
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "Ubicación inválida",
+          });
+      }
+
+      /*
+       * Require intencionadamente aquí.
+       *
+       * Así evitamos cargar
+       * socketSoloTwilio al inicializar
+       * este router.
+       */
+      const {
+        procesarUbicacionTaxista,
+      } =
+        require("../socketSoloTwilio");
+
+      if (
+        typeof procesarUbicacionTaxista !==
+        "function"
+      ) {
+        throw new Error(
+          "procesarUbicacionTaxista no disponible"
+        );
+      }
+
+      const resultado =
+        await procesarUbicacionTaxista({
+          taxistaId,
+          lat,
+          lng,
+          socket: null,
+          esBackground: true,
+        });
+
+      console.log(
+        "📍 GPS background recibido",
+        {
+          taxistaId,
+          lat,
+          lng,
+          accion:
+            resultado?.accion ||
+            null,
+        }
+      );
+
+      return res.json({
+        ok: true,
+
+        accion:
+          resultado?.accion ||
+          "gps_actualizado",
+
+        ubicacionActualizadaEn:
+          resultado?.taxista
+            ?.ubicacionActualizadaEn ||
+          null,
+
+        estado:
+          resultado?.taxista
+            ?.estado ||
+          null,
+
+        paradaId:
+          resultado?.taxista
+            ?.paradaId ||
+          null,
+      });
+
+    } catch (error) {
+      console.error(
+        "❌ Error POST /mobile/ubicacion-background:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+
+          error:
+            "No se pudo actualizar la ubicación",
+
+          detalle:
+            error?.message ||
+            "Error desconocido",
+        });
+    }
+  }
+);
+
 router.post("/push-token", authTaxista, async (req, res) => {
   try {
     const { expoPushToken } = req.body || {};
@@ -585,91 +717,91 @@ function formatearTextoFecha(fecha) {
 */
 
 router.get(
-    "/reservas/disponibles",
-    authTaxista,
-    async (req, res) => {
-        try {
-            const reservas =
-                await prisma.reservaTaxi.findMany({
-                    where: {
-                        estado:
-                            "pendiente",
+  "/reservas/disponibles",
+  authTaxista,
+  async (req, res) => {
+    try {
+      const reservas =
+        await prisma.reservaTaxi.findMany({
+          where: {
+            estado:
+              "pendiente",
 
-                        fechaHora: {
-                            gt:
-                                new Date(),
-                        },
+            fechaHora: {
+              gt:
+                new Date(),
+            },
 
-                        /*
-                         * De momento enseñamos
-                         * reservas normales.
-                         *
-                         * Las especiales tendrán
-                         * un flujo aparte.
-                         */
-                        tipo:
-                            "normal",
-                    },
+            /*
+             * De momento enseñamos
+             * reservas normales.
+             *
+             * Las especiales tendrán
+             * un flujo aparte.
+             */
+            tipo:
+              "normal",
+          },
 
-                    orderBy: {
-                        fechaHora:
-                            "asc",
-                    },
+          orderBy: {
+            fechaHora:
+              "asc",
+          },
 
-                    select: {
-                        id: true,
+          select: {
+            id: true,
 
-                        tipo: true,
+            tipo: true,
 
-                        fechaHora: true,
+            fechaHora: true,
 
-                        direccionRecogida:
-                            true,
+            direccionRecogida:
+              true,
 
-                        direccionBase:
-                            true,
+            direccionBase:
+              true,
 
-                        referenciaRecogida:
-                            true,
+            referenciaRecogida:
+              true,
 
-                        latRecogida:
-                            true,
+            latRecogida:
+              true,
 
-                        lngRecogida:
-                            true,
+            lngRecogida:
+              true,
 
-                        precioFinal:
-                            true,
+            precioFinal:
+              true,
 
-                        creadaEn:
-                            true,
+            creadaEn:
+              true,
 
-                        telefonoCliente: 
-                            true,
-                    },
-                });
+            telefonoCliente:
+              true,
+          },
+        });
 
 
-            return res.json({
-                ok: true,
-                reservas,
-                total:
-                    reservas.length,
-            });
+      return res.json({
+        ok: true,
+        reservas,
+        total:
+          reservas.length,
+      });
 
-        } catch (error) {
-            console.error(
-                "Error GET /mobile/reservas/disponibles:",
-                error
-            );
+    } catch (error) {
+      console.error(
+        "Error GET /mobile/reservas/disponibles:",
+        error
+      );
 
-            return res.status(500).json({
-                ok: false,
-                error:
-                    "No se pudieron cargar las reservas.",
-            });
-        }
+      return res.status(500).json({
+        ok: false,
+        error:
+          "No se pudieron cargar las reservas.",
+      });
     }
+  }
 );
 
 
@@ -680,52 +812,52 @@ router.get(
 */
 
 router.get(
-    "/reservas/mias",
-    authTaxista,
-    async (req, res) => {
-        try {
-            const taxistaId =
-                req.taxistaAuth.taxistaId;
+  "/reservas/mias",
+  authTaxista,
+  async (req, res) => {
+    try {
+      const taxistaId =
+        req.taxistaAuth.taxistaId;
 
 
-            const reservas =
-                await prisma.reservaTaxi.findMany({
-                    where: {
-                        taxistaId,
+      const reservas =
+        await prisma.reservaTaxi.findMany({
+          where: {
+            taxistaId,
 
-                        estado: {
-                            in: [
-                                "aceptada",
-                                "en_servicio",
-                            ],
-                        },
-                    },
+            estado: {
+              in: [
+                "aceptada",
+                "en_servicio",
+              ],
+            },
+          },
 
-                    orderBy: {
-                        fechaHora:
-                            "asc",
-                    },
-                });
+          orderBy: {
+            fechaHora:
+              "asc",
+          },
+        });
 
 
-            return res.json({
-                ok: true,
-                reservas,
-            });
+      return res.json({
+        ok: true,
+        reservas,
+      });
 
-        } catch (error) {
-            console.error(
-                "Error GET /mobile/reservas/mias:",
-                error
-            );
+    } catch (error) {
+      console.error(
+        "Error GET /mobile/reservas/mias:",
+        error
+      );
 
-            return res.status(500).json({
-                ok: false,
-                error:
-                    "No se pudieron consultar tus reservas.",
-            });
-        }
+      return res.status(500).json({
+        ok: false,
+        error:
+          "No se pudieron consultar tus reservas.",
+      });
     }
+  }
 );
 
 
@@ -742,206 +874,206 @@ router.get(
 */
 
 router.post(
-    "/reservas/:id/aceptar",
-    authTaxista,
-    async (req, res) => {
-        try {
-            const {
-                id,
-            } = req.params;
+  "/reservas/:id/aceptar",
+  authTaxista,
+  async (req, res) => {
+    try {
+      const {
+        id,
+      } = req.params;
 
-            const taxistaId =
-                req.taxistaAuth.taxistaId;
-
-
-            const taxista =
-                await prisma.taxista.findUnique({
-                    where: {
-                        id:
-                            taxistaId,
-                    },
-
-                    include: {
-                        vehiculo:
-                            true,
-                    },
-                });
+      const taxistaId =
+        req.taxistaAuth.taxistaId;
 
 
-            if (!taxista) {
-                return res.status(404).json({
-                    ok: false,
-                    error:
-                        "Taxista no encontrado.",
-                });
-            }
+      const taxista =
+        await prisma.taxista.findUnique({
+          where: {
+            id:
+              taxistaId,
+          },
+
+          include: {
+            vehiculo:
+              true,
+          },
+        });
 
 
-            if (!taxista.vehiculo) {
-                return res.status(400).json({
-                    ok: false,
-                    error:
-                        "El taxista no tiene vehículo asociado.",
-                });
-            }
+      if (!taxista) {
+        return res.status(404).json({
+          ok: false,
+          error:
+            "Taxista no encontrado.",
+        });
+      }
 
 
-            const reserva =
-                await prisma.reservaTaxi.findUnique({
-                    where: {
-                        id,
-                    },
-                });
+      if (!taxista.vehiculo) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "El taxista no tiene vehículo asociado.",
+        });
+      }
 
 
-            if (!reserva) {
-                return res.status(404).json({
-                    ok: false,
-                    error:
-                        "Reserva no encontrada.",
-                });
-            }
+      const reserva =
+        await prisma.reservaTaxi.findUnique({
+          where: {
+            id,
+          },
+        });
 
 
-            if (
-                reserva.tipo !==
-                "normal"
-            ) {
-                return res.status(400).json({
-                    ok: false,
-                    error:
-                        "Las reservas especiales tienen otro proceso de aceptación.",
-                });
-            }
+      if (!reserva) {
+        return res.status(404).json({
+          ok: false,
+          error:
+            "Reserva no encontrada.",
+        });
+      }
 
 
-            if (
-                reserva.fechaHora <=
-                new Date()
-            ) {
-                return res.status(400).json({
-                    ok: false,
-                    error:
-                        "La reserva ya ha vencido.",
-                });
-            }
+      if (
+        reserva.tipo !==
+        "normal"
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Las reservas especiales tienen otro proceso de aceptación.",
+        });
+      }
 
 
-            /*
-             * OPERACIÓN ATÓMICA.
-             *
-             * Si dos taxistas pulsan
-             * aceptar simultáneamente,
-             * solo uno conseguirá count = 1.
-             */
-            const resultado =
-                await prisma.reservaTaxi.updateMany({
-                    where: {
-                        id,
-
-                        estado:
-                            "pendiente",
-
-                        taxistaId:
-                            null,
-                    },
-
-                    data: {
-                        estado:
-                            "aceptada",
-
-                        taxistaId,
-
-                        aceptadaEn:
-                            new Date(),
-                    },
-                });
+      if (
+        reserva.fechaHora <=
+        new Date()
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "La reserva ya ha vencido.",
+        });
+      }
 
 
-            if (
-                resultado.count === 0
-            ) {
-                return res.status(409).json({
-                    ok: false,
-                    error:
-                        "Esta reserva ya ha sido aceptada por otro taxista.",
-                });
-            }
+      /*
+       * OPERACIÓN ATÓMICA.
+       *
+       * Si dos taxistas pulsan
+       * aceptar simultáneamente,
+       * solo uno conseguirá count = 1.
+       */
+      const resultado =
+        await prisma.reservaTaxi.updateMany({
+          where: {
+            id,
+
+            estado:
+              "pendiente",
+
+            taxistaId:
+              null,
+          },
+
+          data: {
+            estado:
+              "aceptada",
+
+            taxistaId,
+
+            aceptadaEn:
+              new Date(),
+          },
+        });
 
 
-            const aceptada =
-                await prisma.reservaTaxi.findUnique({
-                    where: {
-                        id,
-                    },
-
-                    include: {
-                        taxista: {
-                            include: {
-                                vehiculo:
-                                    true,
-                            },
-                        },
-                    },
-                });
+      if (
+        resultado.count === 0
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error:
+            "Esta reserva ya ha sido aceptada por otro taxista.",
+        });
+      }
 
 
-            /*
-             * Avisamos a todas las apps
-             * para que desaparezca de
-             * disponibles inmediatamente.
-             */
-            try {
-                const {
-                    obtenerIo,
-                } =
-                    require("../socketSoloTwilio");
+      const aceptada =
+        await prisma.reservaTaxi.findUnique({
+          where: {
+            id,
+          },
 
-                const io =
-                    obtenerIo();
-
-
-                io.emit(
-                    "reserva:aceptada",
-                    {
-                        reservaId:
-                            id,
-
-                        taxistaId,
-                    }
-                );
-
-            } catch (socketError) {
-                console.log(
-                    "No se pudo emitir reserva:aceptada:",
-                    socketError.message
-                );
-            }
+          include: {
+            taxista: {
+              include: {
+                vehiculo:
+                  true,
+              },
+            },
+          },
+        });
 
 
-            return res.json({
-                ok: true,
+      /*
+       * Avisamos a todas las apps
+       * para que desaparezca de
+       * disponibles inmediatamente.
+       */
+      try {
+        const {
+          obtenerIo,
+        } =
+          require("../socketSoloTwilio");
 
-                mensaje:
-                    "La reserva es tuya.",
+        const io =
+          obtenerIo();
 
-                reserva:
-                    aceptada,
-            });
 
-        } catch (error) {
-            console.error(
-                "Error POST /mobile/reservas/:id/aceptar:",
-                error
-            );
+        io.emit(
+          "reserva:aceptada",
+          {
+            reservaId:
+              id,
 
-            return res.status(500).json({
-                ok: false,
-                error:
-                    "No se pudo aceptar la reserva.",
-            });
-        }
+            taxistaId,
+          }
+        );
+
+      } catch (socketError) {
+        console.log(
+          "No se pudo emitir reserva:aceptada:",
+          socketError.message
+        );
+      }
+
+
+      return res.json({
+        ok: true,
+
+        mensaje:
+          "La reserva es tuya.",
+
+        reserva:
+          aceptada,
+      });
+
+    } catch (error) {
+      console.error(
+        "Error POST /mobile/reservas/:id/aceptar:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        error:
+          "No se pudo aceptar la reserva.",
+      });
     }
+  }
 );
 
 module.exports = router;

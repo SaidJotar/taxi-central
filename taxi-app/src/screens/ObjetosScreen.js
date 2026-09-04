@@ -19,6 +19,7 @@ import AppBadge from "../components/ui/AppBadge";
 import SectionHeader from "../components/ui/SectionHeader";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ObjetosScreen() {
   const { token } = useAuth();
@@ -188,14 +189,31 @@ export default function ObjetosScreen() {
             />
           }
         >
-          <SectionHeader
-            title="Objetos perdidos"
-            subtitle="Gestiona los objetos encontrados en el taxi"
-          />
 
           <AppCard style={styles.formCard}>
-            <Text style={styles.formTitle}>Registrar nuevo objeto</Text>
+            <View style={styles.formHeader}>
 
+              <View style={styles.formIcon}>
+                <Ionicons
+                  name="bag-handle-outline"
+                  size={17}
+                  color="#2563eb"
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+
+                <Text style={styles.formTitle}>
+                  Registrar objeto
+                </Text>
+
+                <Text style={styles.formSubtitle}>
+                  Añade un objeto encontrado en el taxi.
+                </Text>
+
+              </View>
+
+            </View>
             <TextInput
               style={styles.input}
               placeholder="Descripción del objeto"
@@ -302,92 +320,146 @@ function getEstadoVariant(estado) {
 }
 
 const styles = StyleSheet.create({
+
   formCard: {
-    marginBottom: 16,
+    marginBottom: 8,
+    padding: 12,
   },
+
   formTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "900",
     color: "#0f172a",
-    marginBottom: 14,
+    marginBottom: 11,
   },
+
+
   input: {
     width: "100%",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    minHeight: 44,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#dbe1ea",
-    fontSize: 16,
-    backgroundColor: "#ffffff",
-    marginBottom: 12,
+    borderColor: "#e2e8f0",
+
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0f172a",
+
+    backgroundColor: "#f8fafc",
+    marginBottom: 8,
   },
+
   textArea: {
-    minHeight: 90,
+    minHeight: 80,
     textAlignVertical: "top",
   },
+
+
   messageWrap: {
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 8,
+    gap: 6,
   },
+
+
   centerBlock: {
-    paddingVertical: 28,
+    paddingVertical: 26,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
   },
+
   infoText: {
     color: "#64748b",
-    fontSize: 15,
+    fontSize: 12,
   },
+
+
   itemCard: {
-    marginBottom: 12,
+    marginBottom: 8,
+    padding: 12,
   },
+
   itemTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 10,
   },
+
   cardTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
     color: "#0f172a",
   },
+
+
   metaRow: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
+
   metaLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
     color: "#64748b",
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 2,
   },
+
   metaValue: {
-    fontSize: 16,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "700",
     color: "#0f172a",
   },
+
+
   actionsRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 5,
   },
+
   actionHalf: {
     flex: 1,
-    minWidth: 140,
   },
+
+
   error: {
     color: "#dc2626",
     fontWeight: "600",
-    fontSize: 15,
+    fontSize: 12,
   },
+
   empty: {
-    color: "#6b7280",
-    fontSize: 15,
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 11,
+  },
+
+  formIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  formSubtitle: {
+    marginTop: 1,
+    fontSize: 10,
+    color: "#64748b",
   },
 });

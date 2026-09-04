@@ -190,10 +190,6 @@ export default function ServiciosScreen() {
           />
         }
       >
-        <SectionHeader
-          title="Servicios"
-          subtitle="Historial de servicios realizados"
-        />
 
         {/* FILTRO POR FECHAS */}
         <AppCard style={styles.filterCard}>
@@ -557,245 +553,276 @@ function getEstadoVariant(estado) {
 }
 
 const styles = StyleSheet.create({
+
   filterCard: {
-    marginBottom: 16,
+    marginBottom: 8,
+    padding: 12,
   },
+
   filterTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "900",
     color: "#0f172a",
-    marginBottom: 4,
+    marginBottom: 2,
   },
+
   filterDescription: {
-    fontSize: 13,
+    fontSize: 10,
+    lineHeight: 15,
     color: "#64748b",
-    marginBottom: 16,
+    marginBottom: 11,
   },
+
+
   filterInputs: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
   },
+
   inputContainer: {
     flex: 1,
   },
+
   inputLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
     color: "#64748b",
     textTransform: "uppercase",
-    marginBottom: 6,
+    marginBottom: 5,
   },
+
   dateInput: {
-    height: 48,
+    height: 44,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    paddingHorizontal: 11,
+
+    fontSize: 13,
     fontWeight: "600",
     color: "#0f172a",
-    backgroundColor: "#ffffff",
+
+    backgroundColor: "#f8fafc",
   },
+
+
   filterButtons: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
+    gap: 7,
+    marginTop: 10,
   },
+
   applyButton: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
-    backgroundColor: "#2563eb",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
+
   applyButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "800",
   },
+
   clearButton: {
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 42,
+    borderRadius: 14,
+
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#e2e8f0",
+
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 18,
+
+    paddingHorizontal: 15,
     backgroundColor: "#ffffff",
   },
+
   clearButtonText: {
     color: "#334155",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "800",
   },
+
+
   filterError: {
-    marginTop: 10,
+    marginTop: 7,
     color: "#dc2626",
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
   },
+
   activeFilterText: {
-    marginTop: 12,
+    marginTop: 8,
     color: "#2563eb",
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700",
   },
+
+
   summaryRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 8,
   },
+
   summaryItem: {
     flex: 1,
+    padding: 11,
   },
+
   summaryLabel: {
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: "700",
     color: "#64748b",
     textTransform: "uppercase",
-    marginBottom: 8,
+    marginBottom: 3,
   },
+
   summaryValue: {
-    fontSize: 27,
-    fontWeight: "800",
+    fontSize: 22,
+    lineHeight: 25,
+    fontWeight: "900",
     color: "#0f172a",
   },
+
+
   centerBlock: {
-    paddingVertical: 28,
+    paddingVertical: 26,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
   },
+
   infoText: {
     color: "#64748b",
-    fontSize: 15,
+    fontSize: 12,
   },
+
+
   serviceCard: {
-    marginBottom: 12,
+    marginBottom: 8,
+    padding: 12,
   },
+
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 10,
   },
+
   cardTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
     color: "#0f172a",
   },
+
+
   metaRow: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
+
   metaLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
     color: "#64748b",
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 2,
   },
+
   metaValue: {
-    fontSize: 16,
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: "700",
     color: "#0f172a",
   },
+
+
   error: {
     color: "#dc2626",
     fontWeight: "600",
-    fontSize: 15,
+    fontSize: 12,
     textAlign: "center",
   },
+
   empty: {
-    color: "#6b7280",
-    fontSize: 15,
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 17,
   },
+
+
   ratingSection: {
-    marginTop: 4,
-
-    paddingTop: 12,
-
+    marginTop: 3,
+    paddingTop: 9,
     borderTopWidth: 1,
-
-    borderTopColor: "#e2e8f0",
+    borderTopColor: "#f1f5f9",
   },
 
   ratingLabel: {
-    fontSize: 12,
-
+    fontSize: 10,
     fontWeight: "700",
-
     color: "#64748b",
-
     textTransform: "uppercase",
-
-    marginBottom: 6,
+    marginBottom: 5,
   },
 
   ratingStarsRow: {
     flexDirection: "row",
-
     alignItems: "center",
-
-    gap: 2,
+    gap: 1,
   },
 
   ratingNumber: {
-    marginLeft: 6,
-
-    fontSize: 14,
-
+    marginLeft: 5,
+    fontSize: 12,
     fontWeight: "800",
-
     color: "#0f172a",
   },
 
   ratingCommentBox: {
-    marginTop: 9,
+    marginTop: 7,
 
-    paddingVertical: 9,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
 
-    paddingHorizontal: 10,
-
-    borderRadius: 10,
-
+    borderRadius: 12,
     backgroundColor: "#f8fafc",
 
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+
     flexDirection: "row",
-
     alignItems: "flex-start",
-
-    gap: 7,
+    gap: 6,
   },
 
   ratingComment: {
     flex: 1,
-
-    fontSize: 13,
-
-    lineHeight: 18,
-
+    fontSize: 11,
+    lineHeight: 16,
     color: "#475569",
-
     fontStyle: "italic",
   },
 
   noRatingRow: {
     flexDirection: "row",
-
     alignItems: "center",
-
-    gap: 6,
+    gap: 5,
   },
 
   noRatingText: {
-    fontSize: 13,
-
+    fontSize: 11,
     color: "#94a3b8",
-
     fontWeight: "600",
   },
+
 });
